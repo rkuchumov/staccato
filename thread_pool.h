@@ -4,140 +4,59 @@
 #include <iostream>
 #include <thread>
 #include <vector>
-#include <deque>
 #include <mutex>
 #include <future>
 
-typedef std::function<void()> task_t;
-class Worker;
-typedef std::shared_ptr<Worker> worker_ptr;
-typedef std::shared_ptr< std::vector<worker_ptr> > workers_ptr;
+#include "worker.h"
 
-class Worker
+enum state_t { ready, running, finished };
+template <class T>
+struct m_future
 {
-    bool _enabled;
-    std::deque<task_t> _queue;
-    workers_ptr _workers;
-    std::thread _thread;
+    state_t state;
+    std::mutex state_lock;
+    std::condition_variable is_finished;
 
-    std::mutex _queue_lock;
+    m_future(): state(ready) {};
 
-    int _me;
+    T data;
+    task_t task;
 
-    void exec()
-    {
-        while(1) {
-            _queue_lock.lock();
+    T get() {
+        task();
 
-            while (!_queue.empty()) {
-                task_t t = _queue.front();
-                _queue.pop_front();
-
-                _queue_lock.unlock();
-                // std::cerr << "Worker(" << _me << ") executing task()\n";
-                t();
-                _queue_lock.lock();
-            }
-
-            _queue_lock.unlock();
-
-            if (!_enabled)
-                break;
-
-            std::this_thread::yield();
-            // cerr << "Worker(" << _me << ") starts stealing\n";
-            task_t t = NULL;
-            int victim = rand() % _workers->size();
-            if (victim == _me)
-                continue;
-            if (_workers->at(victim) == nullptr)
-                continue;
-
-            t = _workers->at(victim)->steal();
-
-            if (t != NULL) {
-                // cerr << _me << " has stolen task\n";
-                t();
-            }
-        }
-    }
-
-public:
-    Worker(int thread_id, workers_ptr workers):
-        _enabled(false),
-        _queue(),
-        _workers(workers),
-        _me(thread_id)
-    { }
-
-    ~Worker()
-    { }
-
-    void fork()
-    {
-        _enabled = true;
-        _thread = std::thread(&Worker::exec, this);
-    }
-
-    void join()
-    {
-        // std::cerr << "Worker(" << _me << ") joning\n";
-        _enabled = false;
-        _thread.join();
-    }
-
-    void assign(task_t task)
-    {
-        // std::cerr << "Worker(" << _me << ") received task\n";
-
-        std::unique_lock<std::mutex> l(_queue_lock);
-        _queue.push_front(task);
-        // std::cerr << "Worker(" << _me << ") pushed task\n";
-    }
-
-    task_t steal()
-    {
-        if (!_enabled)
-            return NULL;
-
-        if (!_queue_lock.try_lock())
-            return NULL;
-
-        if (_queue.empty()) {
-            _queue_lock.unlock();
-            return NULL;
+        if (state != finished) {
+            std::unique_lock<std::mutex> l(state_lock);
+            is_finished.wait(l, [&](){return state == finished; });
         }
 
-        task_t t = _queue.back();
-        _queue.pop_back();
-
-        _queue_lock.unlock();
-
-        return t;
+        return data;
     }
-
-    bool isEmpty()
-    {
-        std::unique_lock<std::mutex> locker(_queue_lock);
-        return _queue.empty();
-    }
-
-    size_t getTaskCount()
-    {
-        std::unique_lock<std::mutex> locker(_queue_lock);
-        return _queue.size();
-    }
-
 };
+
 
 class ThreadPool
 {
     workers_ptr _workers;
 
-    worker_ptr getRandWorker()
+    worker_ptr get_rand_worker()
     {
         int i = rand() % _workers->size();
         return _workers->at(i);
+    }
+
+    worker_ptr get_worker()
+    {
+        auto _me = std::this_thread::get_id();
+        for (auto &it : *_workers) {
+            if (_me == it->get_id()) {
+                return it;
+            }
+        }
+
+        // std::cerr << "___\n";
+
+        return nullptr;
     }
 
 public:
@@ -145,13 +64,10 @@ public:
     {
         _workers = workers_ptr(new std::vector<worker_ptr>());
         for (size_t i = 0; i < thread_cnt; i++) {
-            worker_ptr w(new Worker(i, _workers));
+            worker_ptr w(new Worker(_workers));
             _workers->push_back(w);
         }
 
-        for (auto &it : *_workers) {
-            it->fork();
-        }
         // std::cerr << "ThreadPool is created\n";
     }
 
@@ -165,25 +81,72 @@ public:
         _workers->clear();
     }
 
-    // void exec(task_t t) {
-    //     getRandWorker()->assign(t);
-    // }
-
-    template<class F, class... Args>
-    auto async(F f, Args... _args)
-    -> std::future<typename std::result_of<F(Args...)>::type>
+    template<class R, class F, class... Args>
+    std::shared_ptr<m_future<R>> async(F f, Args... args) 
     {
-        using return_type = typename std::result_of<F(Args...)>::type;
+        std::function<R()> func = std::bind(f, args...);
+        std::shared_ptr<m_future<R>> rc(new m_future<R>());
 
-        auto task = std::make_shared< std::packaged_task<return_type()> > (bind(f, _args...));
+        task_t t = [=]()
+        {
+            rc->state_lock.lock();
+            if (rc->state == ready) {
+                rc->state = running;
+                rc->state_lock.unlock();
 
-        std::future<return_type> rc = task->get_future();
-        
-        getRandWorker()->assign([task](){(*task)(); });
+                rc->data = func();
+
+                // rc->state_lock.lock();
+                rc->state = finished;
+                // rc->state_lock.unlock();
+                rc->is_finished.notify_all();
+            } else {
+                rc->state_lock.unlock();
+            }
+        };
+        rc->task = t;
+
+        worker_ptr w = get_worker();
+        w->assign(t);
 
         return rc;
+    }
+
+    template<class R, class F, class... Args>
+    R exec(F f, Args... args)
+    {
+        std::function<R()> func = std::bind(f, args...);
+        std::shared_ptr<m_future<R>> rc(new m_future<R>());
+
+        task_t t = [=]()
+        {
+            rc->state_lock.lock();
+            if (rc->state == ready) {
+                rc->state = running;
+                rc->state_lock.unlock();
+
+                rc->data = func();
+
+                // rc->state_lock.lock();
+                rc->state = finished;
+                // rc->state_lock.unlock();
+                rc->is_finished.notify_all();
+            } else {
+                rc->state_lock.unlock();
+            }
+        };
+        rc->task = t;
+
+        get_rand_worker()->assign(t);
+
+        for (auto &it : *_workers)
+            it->fork();
+
+        std::unique_lock<std::mutex> l(rc->state_lock);
+        rc->is_finished.wait(l, [&](){return rc->state == finished; });
+
+        return rc->data;
     }
 };
 
 #endif /* end of include guard: THREAD_POOL_H */
-
