@@ -8,12 +8,6 @@
 #include <mutex>
 #include <future>
 
-struct stamped_int
-{
-    int val;
-    int stamp;
-};
-
 template <class T>
 class std_deque
 {
@@ -83,89 +77,6 @@ private:
 };
 
 template <class T>
-class b_deque
-{
-public:
-    b_deque()
-    { 
-        // _deque = new T[50];
-        _deque = std::make_shared<T *> (new T[30000]);
-        _top = {0, 0};
-        _bottom = 0;
-    }
-
-    virtual ~b_deque ()
-    { 
-        // delete _deque;
-    };
-
-    T pop_top()
-    {
-        stamped_int old = _top.load();
-
-        if (_bottom <= old.val)
-            return NULL;
-
-        T r = (*_deque)[old.val];
-
-        stamped_int new_st = {old.val + 1, old.stamp + 1};
-        if (_top.compare_exchange_weak(old, new_st)) {
-            return r;
-        }
-
-        return NULL;
-    }
-
-    T pop_bottom()
-    {
-        if (_bottom == 0)
-            return NULL;
-
-        _bottom--;
-
-        T r = (*_deque)[_bottom];
-
-        stamped_int old = _top.load();
-        stamped_int new_st = {0, old.stamp + 1};
-
-        if (_bottom > old.val)
-            return r;
-        if (_bottom == old.val) {
-            _bottom = 0;
-            if (_top.compare_exchange_weak(old, new_st))
-                return r;
-        }
-
-        _top.store(new_st);
-        return NULL;
-    }
-
-    void push_bottom(const T &val)
-    {
-        (*_deque)[_bottom] = val;
-        _bottom++;
-    }
-
-    void push_bottom_safe(const T &val)
-    {
-        (*_deque)[_bottom] = val;
-        _bottom++;
-    }
-
-    bool empty() const
-    {
-        return (_top.load().val < _bottom);
-    }
-
-private:
-    std::shared_ptr<T *> _deque;
-    int _bottom;
-    std::atomic<stamped_int> _top;
-
-    std::mutex _lock;
-};
-
-template <class T>
 class circular_array
 {
 public:
@@ -186,8 +97,8 @@ public:
         _array[i % size()] = item;
     }
 
-    circular_array<T> *resize(int top, int bottom) {
-        auto a = new circular_array<T>(_log_size + 1);
+    circular_array<T> *resize(int top, int bottom, int delta) {
+        auto a = new circular_array<T>(_log_size + delta);
 
         for(int i = top; i < bottom; i++)
             a->put(i, get(i));
@@ -227,7 +138,7 @@ public:
 
         int size = b - t;
         if (size >= a->size() - 1) {
-            a = a->resize(t, b);
+            a = a->resize(t, b, 1);
             _tasks = a;
         }
 
@@ -252,8 +163,10 @@ public:
         }
 
         T r = a->get(b);
-        if (size > 0)
+        if (size > 0) {
+            perhapsShrink(t, b);
             return r;
+        }
 
         if (!_top.compare_exchange_strong(t, t + 1)) {
             r = NULL;
@@ -286,6 +199,16 @@ private:
     std::atomic<circular_array<T> *> _tasks;
     std::atomic_int _top;
     std::atomic_int _bottom;
+
+    void perhapsShrink(int top, int bottom)
+    {
+        circular_array<T> *a = _tasks.load();
+        if (bottom - top < a->size() / 4) {
+            circular_array<T> *aa = a->resize(top, bottom, -1);
+            _tasks = aa;
+            delete a;
+        }
+    }
 };
 
 #endif /* end of include guard: DEQUE_H */
