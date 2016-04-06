@@ -6,14 +6,13 @@ ALL_FLAGS = -std=c++11 -pthread
 
 TARGET = main
 
-
 SRCS = $(wildcard *.cpp)
 OBJS = $(SRCS:%.cpp=%.o)
 
 .PHONY: all
 all: $(TARGET) 
 
-$(TARGET): $(OBJS)  thread_pool.h
+$(TARGET): $(OBJS)
 	$(CC) $(ALL_FLAGS) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
 
 %.o: %.cpp
@@ -23,14 +22,14 @@ $(TARGET): $(OBJS)  thread_pool.h
 clean:
 	rm $(TARGET) 2>/dev/null || true
 	rm $(OBJS) 2>/dev/null || true
-	# rm .depend 2>/dev/null || true
-
-.PHONY: docs
-docs:
-	doxygen ../docs/config
-
--include .depend
+	rm .depend 2>/dev/null || true
 
 .PHONY: run
 run: $(TARGET)
-	./$(TARGET) 19
+	./$(TARGET)
+
+.PHONY: dep
+dep: $(SRCS)
+	$(CC) $(ALL_FLAGS) $(CFLAGS) -MM $^  > .depend
+
+-include .depend

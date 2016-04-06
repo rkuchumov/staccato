@@ -1,34 +1,17 @@
 #include <iostream>
-#include <thread>
-#include <vector>
-#include <deque>
-#include <mutex>
-#include <condition_variable>
-#include <future>
 #include <unistd.h>
+
 using namespace std;
 
-#include "thread_pool.h"
+#include "scheduler.h"
 
-typedef shared_ptr<ThreadPool> pool_ptr;
-
-int fib(int n, pool_ptr pool) {
-    if (n <= 2)
-        return 1;
-
-    auto left = pool.get()->async<int>(&fib, n - 1, pool);
-    auto right = pool.get()->async<int>(&fib, n - 2, pool);
-
-    return left->get() + right->get();
-}
-
-int fib2(int n)
+int fib_seq(int n)
 {
     if (n <= 2) return 1;
     int x = 1;
     int y = 1;
     int ans = 0;
-    for (int i = 2; i < n; i++) {
+    for (int i = 2; i <= n; i++) {
         ans = x + y;
         x = y;
         y = ans;
@@ -36,20 +19,55 @@ int fib2(int n)
     return ans;
 }
 
-int main(int argc, char *argv[])
+class FibTask: public task
 {
-    if (argc != 2)
-        return -1;
+public:
+	FibTask (int n, long *sum): m_n(n), m_sum(sum) {}
+	~FibTask () {};
 
-    pool_ptr pool(new ThreadPool(3));
+	void execute() {
+		// cout << "executing " << m_n << "\n";
+		if (m_n < 2) {
+			*m_sum = 1;
+			return;
+		}
 
-    int n = atoi(argv[1]);
-    int r = pool.get()->exec<int>(&fib, n, pool);
-    cerr << "fib(" << n << ") = " << r << " ";
-    if (r == fib2(n))
-        cerr << "OK\n";
-    else
-        cerr << "FUCK\n";
+		long x, y;
+
+		FibTask *a = new FibTask(m_n - 1, &x);
+		FibTask *b = new FibTask(m_n - 2, &y);
+
+		set_subtask_count(2);
+		spawn(a);
+		spawn(b);
+
+		wait_for_all();
+
+		*m_sum = x + y;
+
+		return;
+	}
+
+private:
+	int m_n;
+	long *m_sum;
+};
+
+int main()
+{
+	scheduler::initialize(4);
+
+	long ans;
+	int n = 9;
+
+	FibTask *root = new FibTask(n, &ans);
+	root->execute();
+
+    cerr << "\nfib(" << n << ") = " << ans << "\n";
+    if (ans != fib_seq(n))
+        cerr << "WRONG correct: " << fib_seq(n) << "\n";
+
+	scheduler::terminate();
 
     return 0;
 }
