@@ -26,7 +26,6 @@ public:
 	~FibTask () {};
 
 	void execute() {
-		// cout << "executing " << m_n << "\n";
 		if (m_n < 2) {
 			*m_sum = 1;
 			return;
@@ -58,7 +57,7 @@ int main()
 	scheduler::initialize(4);
 
 	long ans;
-	int n = 9;
+	int n = 35;
 
 	FibTask *root = new FibTask(n, &ans);
 	root->execute();
