@@ -61,12 +61,18 @@ int main(int argc, char *argv[])
 	long ans;
 	FibTask *root = new FibTask(n, &ans);
 
+	auto start = std::chrono::steady_clock::now();
+
 	for (int i = 0; i < iter; i++)
 		root->execute();
 
+	auto end = std::chrono::steady_clock::now();
+
 	scheduler::terminate();
 
-    cerr << "fib(" << n << ") = " << ans << "\n";
+    cout << "fib(" << n << ") = " << ans << "\n";
+    double dt = (double) std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000;
+    cout << "Elapsed time: " << dt << " sec\n";
 
     return 0;
 }

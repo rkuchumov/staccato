@@ -50,12 +50,20 @@ int main(int argc, char *argv[])
 	scheduler::initialize(4);
 
 	CustomTask *root = new CustomTask(b, d);
+
+	auto start = std::chrono::steady_clock::now();
+
 	for (int i = 0; i < iter; i++)
 		root->execute();
+
+	auto end = std::chrono::steady_clock::now();
 
 	scheduler::terminate();
 
 	cout << "Done.\n";
+
+    double dt = (double) std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000;
+    cout << "Elapsed time: " << dt << " sec\n";
 
     return 0;
 }

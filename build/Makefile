@@ -1,12 +1,14 @@
 SHELL = /bin/sh
 
 CC = g++
-ALLFLAGS = -std=c++11 -pthread
-CFLAGS = -Wall -Wextra -pedantic -g -O0 -fpic -c
-LDFLAGS = -shared
+LDFLAGS = -std=c++11 -shared -pthread 
+
+CFLAGS = -std=c++11 -Wall -Wextra -pedantic -fpic -c -O2 -DNDEBUG=1 -DNSTAT=1
+
+# debug version:
+# CFLAGS = -std=c++11 -Wall -Wextra -pedantic -fpic -c -g -O0 
 
 TARGET = libsch.so
-
 SRCS = $(wildcard ../src/*.cpp)
 OBJS = $(SRCS:../src/%.cpp=%.o)
 
@@ -14,10 +16,10 @@ OBJS = $(SRCS:../src/%.cpp=%.o)
 all: $(TARGET) 
 
 $(TARGET): $(OBJS)
-	$(CC) $(ALLFLAGS) $(LDFLAGS) $(OBJS) -o $@
+	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
 %.o: ../src/%.cpp
-	$(CC) $(ALLFLAGS) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) $< -o $@
 
 .PHONY: clean
 clean:
@@ -31,6 +33,6 @@ run: $(TARGET)
 
 .PHONY: dep
 dep: $(SRCS)
-	$(CC) $(ALLFLAGS) $(CFLAGS) -MM $^  > .depend
+	$(CC) $(CFLAGS) -MM $^  > .depend
 
 -include .depend

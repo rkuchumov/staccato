@@ -6,6 +6,7 @@
 
 #include "task.h"
 #include "deque.h"
+#include "statistics.h"
 
 class scheduler
 {

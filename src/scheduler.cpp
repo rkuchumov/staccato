@@ -17,6 +17,10 @@ void scheduler::initialize(size_t nthreads)
 
 	workers_count = nthreads - 1;
 
+#ifndef NSTAT
+	statistics::initialize();
+#endif
+
 	is_active = true;
 
 	if (nthreads <= 1)
@@ -24,9 +28,8 @@ void scheduler::initialize(size_t nthreads)
 
 	workers = new std::thread *[workers_count];
 
-	for (size_t i = 0; i < workers_count; i++) {
+	for (size_t i = 0; i < workers_count; i++)
 		workers[i] = new std::thread(initialize_worker, i + 1);
-	}
 }
 
 void scheduler::terminate()
@@ -35,9 +38,16 @@ void scheduler::terminate()
 
 	is_active = false;
 
-	for (size_t i = 0; i < workers_count; i++) {
+#ifndef NSTAT
+	statistics::terminate();
+#endif
+
+	for (size_t i = 0; i < workers_count; i++)
 		workers[i]->join();
-	}
+
+#ifndef NDEBUG
+	std::cerr << "scheduler debug mode\n";
+#endif
 }
 
 void scheduler::initialize_worker(size_t id)
