@@ -5,20 +5,6 @@ using namespace std;
 
 #include "scheduler.h"
 
-int fib_seq(int n)
-{
-    if (n <= 2) return 1;
-    int x = 1;
-    int y = 1;
-    int ans = 0;
-    for (int i = 2; i <= n; i++) {
-        ans = x + y;
-        x = y;
-        y = ans;
-    }
-    return ans;
-}
-
 class FibTask: public task
 {
 public:
@@ -54,24 +40,34 @@ private:
 
 int main(int argc, char *argv[])
 {
-	int n = 35;
+	int n = 30;
+	int iter = 1;
 
-	if (argc >= 2)
-		n = atoi(argv[2]);
-	else
-		cout << "Usage:\n   " << argv[0] << " <N (" << n << ")>\n\n";
+	if (argc == 3) {
+		n = atoi(argv[1]);
+		iter = atoi(argv[2]);
+
+		if (n <= 0 || iter <= 0) {
+			cout << "Can't parse arguments\n";
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		cout << "Usage:\n   " << argv[0];
+		cout << " <N (" << n << ")>";
+		cout << " <Iterations (" << iter << ")>\n\n";
+	}
 
 	scheduler::initialize(4);
 
 	long ans;
 	FibTask *root = new FibTask(n, &ans);
-	root->execute();
 
-    cerr << "fib(" << n << ") = " << ans << "\n";
-    if (ans != fib_seq(n))
-        cerr << "WRONG correct: " << fib_seq(n) << "\n";
+	for (int i = 0; i < iter; i++)
+		root->execute();
 
 	scheduler::terminate();
+
+    cerr << "fib(" << n << ") = " << ans << "\n";
 
     return 0;
 }
