@@ -52,17 +52,22 @@ private:
 	long *m_sum;
 };
 
-int main()
+int main(int argc, char *argv[])
 {
+	int n = 35;
+
+	if (argc >= 2)
+		n = atoi(argv[2]);
+	else
+		cout << "Usage:\n   " << argv[0] << " <N (" << n << ")>\n\n";
+
 	scheduler::initialize(4);
 
 	long ans;
-	int n = 35;
-
 	FibTask *root = new FibTask(n, &ans);
 	root->execute();
 
-    cerr << "\nfib(" << n << ") = " << ans << "\n";
+    cerr << "fib(" << n << ") = " << ans << "\n";
     if (ans != fib_seq(n))
         cerr << "WRONG correct: " << fib_seq(n) << "\n";
 
