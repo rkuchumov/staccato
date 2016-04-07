@@ -22,7 +22,6 @@ public:
 		FibTask *a = new FibTask(m_n - 1, &x);
 		FibTask *b = new FibTask(m_n - 2, &y);
 
-		set_subtask_count(2);
 		spawn(a);
 		spawn(b);
 

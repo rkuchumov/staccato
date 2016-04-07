@@ -5,6 +5,7 @@
 void task::spawn(task *t)
 {
 	t->m_parent = this;
+	subtask_count.fetch_add(1);
 	scheduler::spawn(t);
 }
 
@@ -32,11 +33,6 @@ task::task()
 task::~task()
 {
 
-}
-
-void task::set_subtask_count(size_t n)
-{
-	subtask_count.store(n);
 }
 
 size_t task::get_subtask_count()

@@ -16,8 +16,6 @@ struct CustomTask: public task
 		if (depth == 0)
 			return;
 
-		set_subtask_count(breadth);
-
 		for (int j = 0; j < breadth; j++) {
 			CustomTask *t = new CustomTask(breadth, depth - 1);
 			spawn(t);

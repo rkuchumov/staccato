@@ -3,7 +3,6 @@
 
 #include <cstdlib>
 #include <atomic>
-#include <mutex>
 
 class task
 {
@@ -13,7 +12,6 @@ public:
 
 	virtual void execute() = 0;
 
-	void set_subtask_count(size_t n);
 	void spawn(task *t);
 	void wait_for_all();
 
