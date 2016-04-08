@@ -25,7 +25,6 @@ $(TARGET): $(OBJS)
 clean:
 	rm $(TARGET) 2>/dev/null || true
 	rm $(OBJS) 2>/dev/null || true
-	rm .depend 2>/dev/null || true
 
 .PHONY: run
 run: $(TARGET)

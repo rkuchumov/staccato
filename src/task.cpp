@@ -5,7 +5,7 @@
 void task::spawn(task *t)
 {
 	t->m_parent = this;
-	subtask_count.fetch_add(1);
+	subtask_count.fetch_add(1, std::memory_order_release);
 	scheduler::spawn(t);
 }
 
@@ -37,10 +37,10 @@ task::~task()
 
 size_t task::get_subtask_count()
 {
-	return subtask_count.load();
+	return subtask_count.load(std::memory_order_acquire);
 }
 
 void task::decrement_subtask_count()
 {
-	subtask_count.fetch_sub(1);
+	subtask_count.fetch_sub(1, std::memory_order_relaxed);
 }

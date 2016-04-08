@@ -72,9 +72,9 @@ void scheduler::task_loop(task *parent)
 #endif
 				t->execute();
 #ifndef NDEBUG
-				assert(t->state == task::executing);
-#endif
+				ASSERT(t->state == task::executing, "");
 				ASSERT(t->get_subtask_count() == 0, "Task still has subtaks after it has been executed");
+#endif
 
 				if (t->parent() != NULL)
 					t->parent()->decrement_subtask_count();

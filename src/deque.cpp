@@ -17,37 +17,39 @@ task_deque::task_deque(size_t log_size)
 
 void task_deque::put(task *new_task)
 {
-	size_t b = bottom.load();
-	size_t t = top.load();
+	size_t b = bottom.load(std::memory_order_relaxed);
+	size_t t = top.load(std::memory_order_acquire);
 
-	array_t *a = array.load();
+	array_t *a = array.load(std::memory_order_relaxed);
 
 	if (b - t > a->size - 1) {
 		resize();
-		a = array.load();
+		a = array.load(std::memory_order_relaxed);
 	}
 
-	a->buffer[b % a->size].store(new_task);
-	bottom.store(b + 1);
+	a->buffer[b % a->size].store(new_task, std::memory_order_relaxed);
+	std::atomic_thread_fence(std::memory_order_release);
+	bottom.store(b + 1, std::memory_order_relaxed);
 }
 
 task *task_deque::take()
 {
-	size_t b = bottom.load() - 1;
-	array_t *a = array.load();
-	bottom.store(b);
-	size_t t = top.load();
+	size_t b = bottom.load(std::memory_order_relaxed) - 1;
+	array_t *a = array.load(std::memory_order_relaxed);
+	bottom.store(b, std::memory_order_relaxed);
+	std::atomic_thread_fence(std::memory_order_seq_cst);
+	size_t t = top.load(std::memory_order_relaxed);
 
 	if (t > b) {
-		bottom.store(b + 1);
+		bottom.store(b + 1, std::memory_order_relaxed);
 		return NULL;
 	}
 
-	task *r = a->buffer[b % a->size].load();
+	task *r = a->buffer[b % a->size].load(std::memory_order_relaxed);
 	if (t == b) {
-		if (!top.compare_exchange_strong(t, t + 1))
+		if (!top.compare_exchange_strong(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
 			r = NULL;
-		bottom.store(b + 1);
+		bottom.store(b + 1, std::memory_order_relaxed);
 	}
 
 	return r;
@@ -55,16 +57,17 @@ task *task_deque::take()
 
 task *task_deque::steal()
 {
-	size_t t = top.load();
-	size_t b = bottom.load();
+	size_t t = top.load(std::memory_order_acquire);
+	std::atomic_thread_fence(std::memory_order_seq_cst);
+	size_t b = bottom.load(std::memory_order_acquire);
 
 	if (t >= b)
 		return NULL;
 
-	array_t *a = array.load();
+	array_t *a = array.load(std::memory_order_consume);
 
-	task *r = a->buffer[t % a->size].load();
-	if (!top.compare_exchange_weak(t, t + 1))
+	task *r = a->buffer[t % a->size].load(std::memory_order_relaxed);
+	if (!top.compare_exchange_weak(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
 		return NULL; 
 
 	return r;
