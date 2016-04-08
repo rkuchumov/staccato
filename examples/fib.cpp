@@ -36,6 +36,23 @@ private:
 	long *m_sum;
 };
 
+long fib_seq(int n)
+{
+    if (n < 2)
+    	return 1;
+
+    long x = 1;
+    long y = 1;
+    long ans = 0;
+    for (int i = 2; i <= n; i++) {
+        ans = x + y;
+        x = y;
+        y = ans;
+    }
+
+    return ans;
+}
+
 int main(int argc, char *argv[])
 {
 	int n = 30;
@@ -69,7 +86,13 @@ int main(int argc, char *argv[])
 
 	scheduler::terminate();
 
-    cout << "fib(" << n << ") = " << ans << "\n";
+	long seq = fib_seq(n);
+	if (ans == seq)
+		cout << "fib(" << n << ") = fib_seq(" << n << ") = " << ans << "\n";
+	else
+		cout << "Computation error: fib(" << n << ") = " << ans 
+			<< "; fib_seq(" << n << ") = " << fib_seq(n) << "\n";
+
     double dt = (double) std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000;
     cout << "Elapsed time: " << dt << " sec\n";
 
