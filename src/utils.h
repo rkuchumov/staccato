@@ -4,6 +4,11 @@
 #include <iostream>
 #include <cassert>
 
+#ifndef LEVEL1_DCACHE_LINESIZE
+#define LEVEL1_DCACHE_LINESIZE 64
+#endif
+typedef char cacheline_t [LEVEL1_DCACHE_LINESIZE];
+
 #ifndef NDEBUG
 #   define ASSERT(condition, message) \
     do { \

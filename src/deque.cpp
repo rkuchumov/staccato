@@ -9,8 +9,8 @@ task_deque::task_deque(size_t log_size)
 	bottom = 1;
 
 	array_t *a = new array_t;
-	a->size = 1 << log_size;
-	a->buffer = new atomic_task[a->size];
+	a->size_mask = (1 << log_size) - 1;
+	a->buffer = new atomic_task[a->size_mask + 1];
 
 	array.store(a);
 }
@@ -22,12 +22,12 @@ void task_deque::put(task *new_task)
 
 	array_t *a = array.load(std::memory_order_relaxed);
 
-	if (b - t > a->size - 1) {
+	if (b - t > a->size_mask) {
 		resize();
 		a = array.load(std::memory_order_relaxed);
 	}
 
-	a->buffer[b % a->size].store(new_task, std::memory_order_relaxed);
+	a->buffer[b & a->size_mask].store(new_task, std::memory_order_relaxed);
 	std::atomic_thread_fence(std::memory_order_release);
 	bottom.store(b + 1, std::memory_order_relaxed);
 }
@@ -45,7 +45,7 @@ task *task_deque::take()
 		return NULL;
 	}
 
-	task *r = a->buffer[b % a->size].load(std::memory_order_relaxed);
+	task *r = a->buffer[b & a->size_mask].load(std::memory_order_relaxed);
 	if (t == b) {
 		if (!top.compare_exchange_strong(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
 			r = NULL;
@@ -66,7 +66,7 @@ task *task_deque::steal()
 
 	array_t *a = array.load(std::memory_order_consume);
 
-	task *r = a->buffer[t % a->size].load(std::memory_order_relaxed);
+	task *r = a->buffer[t & a->size_mask].load(std::memory_order_relaxed);
 	if (!top.compare_exchange_weak(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
 		return NULL; 
 
@@ -78,12 +78,12 @@ void task_deque::resize()
 	array_t *old = array.load();
 
 	array_t *a = new array_t;
-	a->size = 2 * old->size;
-	a->buffer = new atomic_task[a->size];
+	a->size_mask = (old->size_mask << 1) | 1;
+	a->buffer = new atomic_task[a->size_mask + 1];
 
 	for (size_t i = top.load(); i < bottom.load(); i++) {
-		task *item = old->buffer[i % old->size].load();
-		a->buffer[i % a->size].store(item);
+		task *item = old->buffer[i & old->size_mask].load();
+		a->buffer[i & a->size_mask].store(item);
 	}
 
 	array.store(a);

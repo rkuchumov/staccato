@@ -2,11 +2,15 @@ SHELL = /bin/sh
 
 CC = g++
 LDFLAGS = -std=c++11 -shared -pthread 
-
-CFLAGS = -std=c++11 -Wall -Wextra -pedantic -fpic -c -O2 -DNDEBUG=1 -DNSTAT=1
+ALL_FLAGS = -std=c++11 -Wall -Wextra -pedantic -fpic -c
+VARS = -DLEVEL1_DCACHE_LINESIZE=`getconf LEVEL1_DCACHE_LINESIZE`
 
 # debug version:
-# CFLAGS = -std=c++11 -Wall -Wextra -pedantic -fpic -c -g -O0 
+CFLAGS = -g -00
+
+# reliase version:
+CFLAGS = -O2 
+VARS += -DNDEBUG=1 -DNSTAT=1
 
 TARGET = libsch.so
 SRCS = $(wildcard ../src/*.cpp)
@@ -19,7 +23,7 @@ $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
 %.o: ../src/%.cpp
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(ALL_FLAGS) $(CFLAGS) $(VARS) $< -o $@
 
 .PHONY: clean
 clean:
