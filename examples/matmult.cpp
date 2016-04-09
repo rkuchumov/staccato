@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
 	print_matrix(A, size);
 #endif
 
-	scheduler::initialize(4);
+	scheduler::initialize();
 
 	auto start = std::chrono::steady_clock::now();
 

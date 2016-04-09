@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 		sum_before += array[i];
 	}
 
-	scheduler::initialize(4);
+	scheduler::initialize();
 
 	MergeSort *root = new MergeSort(array, tmp, 0, size);
 

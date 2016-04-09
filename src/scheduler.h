@@ -11,7 +11,7 @@
 class scheduler
 {
 public:
-	static void initialize(size_t nthreads);
+	static void initialize(size_t nthreads = 0);
 	static void terminate();
 
 private:

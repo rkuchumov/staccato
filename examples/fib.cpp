@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 		cout << " <Iterations (" << iter << ")>\n\n";
 	}
 
-	scheduler::initialize(4);
+	scheduler::initialize();
 
 	long ans;
 	FibTask *root = new FibTask(n, &ans);

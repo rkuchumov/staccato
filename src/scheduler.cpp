@@ -9,7 +9,8 @@ size_t scheduler::workers_count = 0;
 
 void scheduler::initialize(size_t nthreads)
 {
-	ASSERT(nthreads > 0, "Number of worker threads must be greater than 0");
+	if (nthreads == 0)
+		nthreads = std::thread::hardware_concurrency();
 
 	pool = new task_deque[nthreads];
 

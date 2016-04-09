@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 		cout << " <Iterations (" << iter << ")>\n\n";
 	}
 
-	scheduler::initialize(4);
+	scheduler::initialize();
 
 	CustomTask *root = new CustomTask(b, d);
 
