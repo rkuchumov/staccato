@@ -75,15 +75,12 @@ struct MultTask: public task
 
 		size_t s = size / 2;
 
-		MultTask *l[2][2];
-		MultTask *r[2][2];
-
 		for (int i = 0; i < 2; i++) {
 			for (int j = 0; j < 2; j++) {
-				l[i][j] = new MultTask(left, s, col_a + i*s, row_a, col_b, row_b + j*s, i*s, j*s);
-				spawn(l[i][j]);
-				r[i][j] = new MultTask(right, s, col_a + i*s, row_a + s, col_b + s, row_b + j*s, i*s, j*s);
-				spawn(r[i][j]);
+				MultTask *left_task = new MultTask(left, s, col_a + i*s, row_a, col_b, row_b + j*s, i*s, j*s);
+				spawn(left_task);
+				MultTask *right_task = new MultTask(right, s, col_a + i*s, row_a + s, col_b + s, row_b + j*s, i*s, j*s);
+				spawn(right_task);
 			}
 		}
 

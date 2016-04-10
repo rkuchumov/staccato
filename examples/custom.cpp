@@ -62,8 +62,9 @@ int main(int argc, char *argv[])
 
 	cout << "Done.\n";
 
-    double dt = (double) std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000;
-    cout << "Elapsed time: " << dt << " sec\n";
+	double dt = (double) std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000000;
+	cout << "Iteration time: " << dt / iter << " sec\n";
+	cout << "Elapsed time: " << dt << " sec\n";
 
-    return 0;
+	return 0;
 }

@@ -23,15 +23,17 @@ private:
 	static void initialize_worker(size_t id);
 	static std::thread **workers;
 
+	cacheline padding_0;
+
 	static void spawn(task *t);
 	static void task_loop(task *parent);
+
+	static thread_local task_deque* my_pool;
 
 	static bool is_active;
 	static task_deque *pool;
 	static task *steal_task();
 	static size_t workers_count;
-
-	static thread_local task_deque* my_pool;
 };
 
 #endif /* end of include guard: SCHEDULER_H */
