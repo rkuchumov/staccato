@@ -3,7 +3,7 @@
 
 task_deque *scheduler::pool;
 std::thread **scheduler::workers;
-unsigned thread_local scheduler::me;
+thread_local task_deque* scheduler::my_pool = NULL;
 bool scheduler::is_active = false;
 size_t scheduler::workers_count = 0;
 
@@ -13,8 +13,7 @@ void scheduler::initialize(size_t nthreads)
 		nthreads = std::thread::hardware_concurrency();
 
 	pool = new task_deque[nthreads];
-
-	me = 0;
+	my_pool = pool;
 
 	workers_count = nthreads - 1;
 
@@ -47,77 +46,83 @@ void scheduler::terminate()
 		workers[i]->join();
 
 #ifndef NDEBUG
-	std::cerr << "scheduler debug mode\n";
+	std::cerr << "scheduler was working in debug mode\n";
 #endif
 }
 
 void scheduler::initialize_worker(size_t id)
 {
-	me = id;
+	ASSERT(id > 0, "Worker #0 is master");
+
+	my_pool = &pool[id];
 
 	task_loop(NULL);
 }
 
 void scheduler::task_loop(task *parent)
 {
-	assert(parent != NULL || (parent == NULL && me != 0));
+	ASSERT(parent != NULL || (parent == NULL && my_pool != pool),
+			"Root task must be executed only on master");
 
 	task *t = NULL;
 
 	while (true) {
-		while (true) {
+		while (true) { // Local tasks loop
 			if (t) {
 #ifndef NDEBUG
-				ASSERT(t->state == task::ready, me << " task is already taken, state: " << t->state);
+				ASSERT(t->state == task::ready, "Task is already taken, state: " << t->state);
 				t->state = task::executing;
 #endif
 				t->execute();
 #ifndef NDEBUG
 				ASSERT(t->state == task::executing, "");
-				ASSERT(t->get_subtask_count() == 0, "Task still has subtaks after it has been executed");
+				ASSERT(t->subtask_count == 0,
+						"Task still has subtaks after it has been executed");
 #endif
 
-				if (t->parent() != NULL)
-					t->parent()->decrement_subtask_count();
+				if (t->parent != NULL)
+					dec_relaxed(t->parent->subtask_count);
 
 				delete t;
 			}
 
-			if (parent != NULL && parent->get_subtask_count() == 0)
+			if (parent != NULL && load_relaxed(parent->subtask_count) == 0)
 				return;
 
-			t = pool[me].take();
+			t = my_pool->take();
 
 			if (!t)
 				break;
-		}
+		} 
 
 		if (parent == NULL && !is_active)
 			return;
 
 		t = steal_task();
-	}
+	} 
 
 	ASSERT(false, "Must never get there");
 }
 
 void scheduler::spawn(task *t)
 {
-	pool[me].put(t);
+	ASSERT(my_pool != NULL, "Task Pool is not initialized");
+	my_pool->put(t);
 }
 
 task *scheduler::steal_task()
 {
-	if (workers_count == 0)
-		return NULL;
+	ASSERT(workers_count != 0, "Stealing when scheduler has a single worker");
 
-	size_t n = workers_count + 1;
-	size_t victim = rand() % n;
-	if (victim == me)
-		victim = (victim + 1) % n;
+	size_t n = workers_count + 1; // +1 for master
+	size_t victim_id = rand() % n;
+	task_deque *victim_pool = &pool[victim_id];
+	if (victim_pool == my_pool)
+		victim_pool = &pool[(victim_id + 1) % n];
 
-	ASSERT(victim != me, "Stealing from my own deque");
-	task *t = pool[victim].steal();
+	ASSERT(victim_pool != NULL, "Stealing from NULL deque");
+	ASSERT(victim_pool != my_pool, "Stealing from my own deque");
+	task *t = victim_pool->steal();
 
 	return t;
 }

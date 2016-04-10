@@ -4,8 +4,8 @@
 
 void task::spawn(task *t)
 {
-	t->m_parent = this;
-	subtask_count.fetch_add(1, std::memory_order_release);
+	t->parent = this;
+	inc_relaxed(subtask_count);
 	scheduler::spawn(t);
 }
 
@@ -15,32 +15,9 @@ void task::wait_for_all()
 	ASSERT(subtask_count == 0, "Task still has subtaks after it task_loop()");
 }
 
-task *task::parent()
+task::task(): parent(NULL), subtask_count(0)
 {
-	return m_parent;
-}
-
-task::task() 
-{
-	subtask_count = 0;
-	m_parent = NULL;
-
 #ifndef NDEBUG
 	state = ready;
 #endif
-}
-
-task::~task()
-{
-
-}
-
-size_t task::get_subtask_count()
-{
-	return subtask_count.load(std::memory_order_acquire);
-}
-
-void task::decrement_subtask_count()
-{
-	subtask_count.fetch_sub(1, std::memory_order_relaxed);
 }

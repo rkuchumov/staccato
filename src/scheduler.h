@@ -15,24 +15,23 @@ public:
 	static void terminate();
 
 private:
+	friend class task;
+
 	scheduler() {};
 	~scheduler() {};
 
-	friend class task;
-	static void task_loop(task *parent);
-	static void spawn(task *t);
-	static task *steal_task();
-
-	static task_deque *pool;
+	static void initialize_worker(size_t id);
 	static std::thread **workers;
 
-	static void initialize_worker(size_t id);
-
-	static unsigned thread_local me;
+	static void spawn(task *t);
+	static void task_loop(task *parent);
 
 	static bool is_active;
-
+	static task_deque *pool;
+	static task *steal_task();
 	static size_t workers_count;
+
+	static thread_local task_deque* my_pool;
 };
 
 #endif /* end of include guard: SCHEDULER_H */

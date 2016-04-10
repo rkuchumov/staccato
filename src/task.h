@@ -8,21 +8,19 @@ class task
 {
 public:
 	task();
-	virtual ~task();
-
-	virtual void execute() = 0;
+	virtual ~task() {};
 
 	void spawn(task *t);
 	void wait_for_all();
 
-	task *parent();
+	virtual void execute() = 0;
 
 private:
 	friend class scheduler;
 
+	task *parent;
+
 	std::atomic_size_t subtask_count;
-	size_t get_subtask_count();
-	void decrement_subtask_count();
 
 #ifndef NDEBUG
 	enum state_t {
@@ -33,8 +31,6 @@ private:
 	};
 	state_t state;
 #endif
-
-	task *m_parent;
 };
 
 #endif /* end of include guard: TASK_H */

@@ -6,7 +6,7 @@ ALL_FLAGS = -std=c++11 -Wall -Wextra -pedantic -fpic -c
 VARS = -DLEVEL1_DCACHE_LINESIZE=`getconf LEVEL1_DCACHE_LINESIZE`
 
 # debug version:
-CFLAGS = -g -00
+CFLAGS = -g -O0
 
 # reliase version:
 CFLAGS = -O2 

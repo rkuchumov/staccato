@@ -21,15 +21,15 @@ private:
 		atomic_task *buffer;
 	} array_t;
 
-	cacheline_t padding_0;
+	cacheline padding_0;
 	std::atomic_size_t top;
 
-	cacheline_t padding_1;
+	cacheline padding_1;
 	std::atomic_size_t bottom;
 
-	cacheline_t padding_2;
+	cacheline padding_2;
 	std::atomic<array_t *> array;
-	cacheline_t padding_3;
+	cacheline padding_3;
 
 	void resize();
 };
