@@ -14,11 +14,16 @@ public:
 	static void initialize(size_t nthreads = 0);
 	static void terminate();
 
+	static size_t deque_log_size;
+	static size_t tasks_per_steal;
+
 private:
 	friend class task;
 
 	scheduler() {};
 	~scheduler() {};
+
+	static void check_paramters();
 
 	static void initialize_worker(size_t id);
 	static std::thread **workers;
@@ -34,6 +39,10 @@ private:
 	static task_deque *pool;
 	static task *steal_task();
 	static size_t workers_count;
+
+#ifndef NDEBUG
+	static thread_local size_t my_id;
+#endif
 };
 
 #endif /* end of include guard: SCHEDULER_H */

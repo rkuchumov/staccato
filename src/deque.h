@@ -7,15 +7,17 @@
 class task_deque
 {
 public:
-    task_deque(size_t log_size = 8);
+	task_deque();
 
-    void put(task *t);
-    task *take();
-    task *steal();
+	void put(task *t);
+	task *take();
+	task *steal(task_deque *thief);
+
+	static size_t deque_log_size;
+	static size_t tasks_per_steal;
 
 private:
 	typedef std::atomic<task *> atomic_task;
-
 	typedef struct {
 		size_t size_mask; // = (2^log_size) - 1
 		atomic_task *buffer;
@@ -30,6 +32,8 @@ private:
 	cacheline padding_2;
 	std::atomic<array_t *> array;
 	cacheline padding_3;
+
+	size_t load_from(array_t *buffer, size_t top, size_t s);
 
 	void resize();
 };

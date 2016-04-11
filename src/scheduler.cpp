@@ -1,29 +1,44 @@
 #include "utils.h"
 #include "scheduler.h"
 
-task_deque *scheduler::pool;
-std::thread **scheduler::workers;
-thread_local task_deque* scheduler::my_pool = NULL;
 bool scheduler::is_active = false;
+std::thread **scheduler::workers;
 size_t scheduler::workers_count = 0;
+
+task_deque *scheduler::pool;
+thread_local task_deque* scheduler::my_pool;
+
+size_t scheduler::deque_log_size = 8;
+size_t scheduler::tasks_per_steal = 1;
+
+#ifndef NDEBUG
+thread_local size_t scheduler::my_id = 0;
+#endif
 
 void scheduler::initialize(size_t nthreads)
 {
 	if (nthreads == 0)
 		nthreads = std::thread::hardware_concurrency();
 
+	check_paramters();
+
+	task_deque::deque_log_size = deque_log_size;
+	task_deque::tasks_per_steal = tasks_per_steal;
 	pool = new task_deque[nthreads];
 	my_pool = pool;
-
-	workers_count = nthreads - 1;
 
 #ifndef NSTAT
 	statistics::initialize();
 #endif
 
+#ifndef NDEBUG
+	my_id = 0;
+#endif
+
 	is_active = true;
 
-	if (nthreads <= 1)
+	workers_count = nthreads - 1;
+	if (workers_count == 0)
 		return;
 
 	workers = new std::thread *[workers_count];
@@ -50,9 +65,27 @@ void scheduler::terminate()
 #endif
 }
 
+void scheduler::check_paramters()
+{
+	if (deque_log_size == 0 || deque_log_size > 31) {
+		deque_log_size = 8;
+		std::cerr << "Incorrect deque size. Restored to 8\n";
+	}
+
+	if (tasks_per_steal == 0) {
+		tasks_per_steal = 1;
+		std::cerr << "Incorrect number of tasks per steal. Restored to 1\n";
+	}
+}
+
+
 void scheduler::initialize_worker(size_t id)
 {
 	ASSERT(id > 0, "Worker #0 is master");
+
+#ifndef NDEBUG
+	my_id = id;
+#endif
 
 	my_pool = &pool[id];
 
@@ -122,7 +155,6 @@ task *scheduler::steal_task()
 
 	ASSERT(victim_pool != NULL, "Stealing from NULL deque");
 	ASSERT(victim_pool != my_pool, "Stealing from my own deque");
-	task *t = victim_pool->steal();
 
-	return t;
+	return victim_pool->steal(my_pool);
 }
