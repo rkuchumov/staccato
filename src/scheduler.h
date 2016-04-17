@@ -19,6 +19,7 @@ public:
 
 private:
 	friend class task;
+	friend class statistics;
 
 	scheduler() {};
 	~scheduler() {};

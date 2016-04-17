@@ -27,24 +27,25 @@ void scheduler::initialize(size_t nthreads)
 	pool = new task_deque[nthreads];
 	my_pool = pool;
 
+	workers_count = nthreads - 1;
+
+#ifndef NDEBUG
+	my_id = 0;
+	std::cerr << "Scheduler is working in debug mode\n";
+#endif
+
 #ifndef NSTAT
 	statistics::initialize();
 #endif
 
-#ifndef NDEBUG
-	my_id = 0;
-#endif
-
 	is_active = true;
 
-	workers_count = nthreads - 1;
-	if (workers_count == 0)
-		return;
+	if (workers_count != 0) {
+		workers = new std::thread *[workers_count];
 
-	workers = new std::thread *[workers_count];
-
-	for (size_t i = 0; i < workers_count; i++)
-		workers[i] = new std::thread(initialize_worker, i + 1);
+		for (size_t i = 0; i < workers_count; i++)
+			workers[i] = new std::thread(initialize_worker, i + 1);
+	}
 }
 
 void scheduler::terminate()
@@ -59,10 +60,6 @@ void scheduler::terminate()
 
 	for (size_t i = 0; i < workers_count; i++)
 		workers[i]->join();
-
-#ifndef NDEBUG
-	std::cerr << "scheduler was working in debug mode\n";
-#endif
 }
 
 void scheduler::check_paramters()
@@ -82,6 +79,10 @@ void scheduler::check_paramters()
 void scheduler::initialize_worker(size_t id)
 {
 	ASSERT(id > 0, "Worker #0 is master");
+
+#ifndef NSTAT
+	statistics::set_worker_id(id);
+#endif
 
 #ifndef NDEBUG
 	my_id = id;
@@ -148,7 +149,7 @@ task *scheduler::steal_task()
 	ASSERT(workers_count != 0, "Stealing when scheduler has a single worker");
 
 	size_t n = workers_count + 1; // +1 for master
-	size_t victim_id = rand() % n;
+	size_t victim_id = my_rand() % n;
 	task_deque *victim_pool = &pool[victim_id];
 	if (victim_pool == my_pool)
 		victim_pool = &pool[(victim_id + 1) % n];

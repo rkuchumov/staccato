@@ -1,5 +1,5 @@
 #include <atomic>
-
+#include "statistics.h"
 #include "utils.h"
 #include "deque.h"
 
@@ -37,6 +37,8 @@ void task_deque::put(task *new_task)
 	atomic_fence_release();
 
 	store_relaxed(bottom, b + 1);
+
+	COUNT(put);
 }
 
 size_t task_deque::load_from(array_t *other, size_t other_top, size_t size)
@@ -76,15 +78,19 @@ task *task_deque::take()
 	if ((t + (tasks_per_steal - 1)) >= b) {
 		// Deque had less or equal tasks tnan steal amount
 		task *r = load_relaxed(a->buffer[t & a->size_mask]);
-		if (!cas_strong(top, t, t + 1)) // Check if they are not stollen
+		if (!cas_strong(top, t, t + 1)) { // Check if they are not stollen
+			COUNT(take_failed);
 			r = NULL;
+		}
 
 		ASSERT(bottom == b, "Bottom must point to the last task, as we decremented it");
 
+		COUNT(take);
 		store_relaxed(bottom, b + 1);
 		return r;
 	}
 
+	COUNT(take);
 	return load_relaxed(a->buffer[b & a->size_mask]);
 }
 
@@ -105,9 +111,12 @@ task *task_deque::steal(task_deque *thief)
 
 	if (tasks_per_steal == 1 || b - t < tasks_per_steal) {
 		// Victim doesn't have required amount of tasks
-		if (!cas_weak(top, t, t + 1)) // Stealing one task
+		if (!cas_weak(top, t, t + 1)) {// Stealing one task
+			COUNT(failed_single_steal);
 			return NULL; 
+		}
 
+		COUNT(single_steal);
 		return r;
 	}
 
@@ -115,14 +124,17 @@ task *task_deque::steal(task_deque *thief)
 	size_t thief_b = thief->load_from(a, t + 1, tasks_per_steal - 1);
 
 	// Moved tasks could be stolen or one task could be taken by owner
-	if (!cas_weak(top, t, t + tasks_per_steal))
+	if (!cas_weak(top, t, t + tasks_per_steal)) {
+		COUNT(failed_multiple_steal);
 		return NULL; 
+	}
 
 	ASSERT(thief->bottom == thief_b, "Thief bottom index has changed");
 
 	// Steal was successfull, updating thief bottom
 	store_relaxed(thief->bottom, thief_b + tasks_per_steal - 1);
 
+	COUNT(multiple_steal);
 	return r;
 }
 
@@ -145,4 +157,6 @@ void task_deque::resize()
 
 	delete []old->buffer;
 	delete old;
+
+	COUNT(resize);
 }

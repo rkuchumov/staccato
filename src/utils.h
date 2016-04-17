@@ -38,5 +38,29 @@ typedef char cacheline[LEVEL1_DCACHE_LINESIZE];
 #define dec_relaxed(var) (var).fetch_sub(1, std::memory_order_relaxed)
 #define inc_relaxed(var) (var).fetch_add(1, std::memory_order_relaxed)
 
+#ifndef NSTAT
+// #    define COUNT(event) do {} while (false);
+#    define COUNT(event) statistics::count(statistics::event)
+#else
+#    define COUNT(event) do {} while (false);
+#endif
+
+inline unsigned long my_rand() {
+	static unsigned long x = 123456789;
+	static unsigned long y = 362436069;
+	static unsigned long z = 521288629;
+
+	x ^= x << 16;
+	x ^= x >> 5;
+	x ^= x << 1;
+
+	unsigned long t = x;
+	x = y;
+	y = z;
+	z = t ^ x ^ y;
+
+	return z;
+}
+
 #endif /* end of include guard: UTILS_H */
 

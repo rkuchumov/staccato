@@ -23,6 +23,7 @@ private:
 	std::atomic_size_t subtask_count;
 
 #ifndef NDEBUG
+	// TODO: moar states
 	enum state_t {
 		undef     = 0,
 		ready     = 1,
