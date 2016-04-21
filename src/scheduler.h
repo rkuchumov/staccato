@@ -36,7 +36,7 @@ private:
 
 	static thread_local task_deque* my_pool;
 
-	static bool is_active;
+	static std::atomic_bool is_active;
 	static task_deque *pool;
 	static task *steal_task();
 	static size_t workers_count;

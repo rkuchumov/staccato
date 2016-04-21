@@ -1,7 +1,7 @@
 #include "utils.h"
 #include "scheduler.h"
 
-bool scheduler::is_active = false;
+std::atomic_bool scheduler::is_active(false);
 std::thread **scheduler::workers;
 size_t scheduler::workers_count = 0;
 
@@ -129,7 +129,7 @@ void scheduler::task_loop(task *parent)
 				break;
 		} 
 
-		if (parent == NULL && !is_active)
+		if (parent == NULL && !load_relaxed(is_active))
 			return;
 
 		t = steal_task();

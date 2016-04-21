@@ -16,6 +16,10 @@ public:
 	static size_t deque_log_size;
 	static size_t tasks_per_steal;
 
+#if SAMPLE_DEQUES_SIZES
+	ssize_t size();
+#endif
+
 private:
 	typedef std::atomic<task *> atomic_task;
 	typedef struct {

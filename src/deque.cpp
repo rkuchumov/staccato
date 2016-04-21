@@ -34,6 +34,7 @@ void task_deque::put(task *new_task)
 	}
 
 	store_relaxed(a->buffer[b & a->size_mask], new_task);
+
 	atomic_fence_release();
 
 	store_relaxed(bottom, b + 1);
@@ -77,15 +78,18 @@ task *task_deque::take()
 
 	if ((t + (tasks_per_steal - 1)) >= b) {
 		// Deque had less or equal tasks tnan steal amount
+
 		task *r = load_relaxed(a->buffer[t & a->size_mask]);
+
 		if (!cas_strong(top, t, t + 1)) { // Check if they are not stollen
-			COUNT(take_failed);
 			r = NULL;
+			COUNT(take_failed);
+		} else {
+			COUNT(take);
 		}
 
 		ASSERT(bottom == b, "Bottom must point to the last task, as we decremented it");
 
-		COUNT(take);
 		store_relaxed(bottom, b + 1);
 		return r;
 	}
@@ -112,7 +116,7 @@ task *task_deque::steal(task_deque *thief)
 	if (tasks_per_steal == 1 || b - t < tasks_per_steal) {
 		// Victim doesn't have required amount of tasks
 		if (!cas_weak(top, t, t + 1)) {// Stealing one task
-			COUNT(failed_single_steal);
+			COUNT(single_steal_failed);
 			return NULL; 
 		}
 
@@ -125,7 +129,7 @@ task *task_deque::steal(task_deque *thief)
 
 	// Moved tasks could be stolen or one task could be taken by owner
 	if (!cas_weak(top, t, t + tasks_per_steal)) {
-		COUNT(failed_multiple_steal);
+		COUNT(multiple_steal_failed);
 		return NULL; 
 	}
 
@@ -160,3 +164,13 @@ void task_deque::resize()
 
 	COUNT(resize);
 }
+
+#if SAMPLE_DEQUES_SIZES
+ssize_t task_deque::size()
+{
+	size_t t = load_consume(top);
+	size_t b = load_consume(bottom);
+
+	return (ssize_t) b - t;
+}
+#endif
