@@ -1,7 +1,13 @@
 #include <atomic>
-#include "statistics.h"
+
 #include "utils.h"
 #include "deque.h"
+#include "statistics.h"
+
+namespace staccato
+{
+namespace internal
+{
 
 size_t task_deque::deque_log_size = 8;
 size_t task_deque::tasks_per_steal = 1;
@@ -73,7 +79,7 @@ task *task_deque::take()
 
 	if (t > b) { // Deque was empty, restoring to empty state
 		store_relaxed(bottom, b + 1);
-		return NULL;
+		return nullptr;
 	}
 
 	if ((t + (tasks_per_steal - 1)) >= b) {
@@ -82,7 +88,7 @@ task *task_deque::take()
 		task *r = load_relaxed(a->buffer[t & a->size_mask]);
 
 		if (!cas_strong(top, t, t + 1)) { // Check if they are not stollen
-			r = NULL;
+			r = nullptr;
 			COUNT(take_failed);
 		} else {
 			COUNT(take);
@@ -107,7 +113,7 @@ task *task_deque::steal(task_deque *thief)
 	size_t b = load_acquire(bottom);
 
 	if (t >= b) // Deque is empty
-		return NULL;
+		return nullptr;
 
 	array_t *a = load_consume(array);
 
@@ -117,7 +123,7 @@ task *task_deque::steal(task_deque *thief)
 		// Victim doesn't have required amount of tasks
 		if (!cas_weak(top, t, t + 1)) {// Stealing one task
 			COUNT(single_steal_failed);
-			return NULL; 
+			return nullptr; 
 		}
 
 		COUNT(single_steal);
@@ -130,7 +136,7 @@ task *task_deque::steal(task_deque *thief)
 	// Moved tasks could be stolen or one task could be taken by owner
 	if (!cas_weak(top, t, t + tasks_per_steal)) {
 		COUNT(multiple_steal_failed);
-		return NULL; 
+		return nullptr; 
 	}
 
 	ASSERT(thief->bottom == thief_b, "Thief bottom index has changed");
@@ -165,7 +171,7 @@ void task_deque::resize()
 	COUNT(resize);
 }
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 ssize_t task_deque::size()
 {
 	size_t t = load_consume(top);
@@ -173,4 +179,7 @@ ssize_t task_deque::size()
 
 	return (ssize_t) b - t;
 }
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
+
+} // namespace internal
+} // namespace stacccato

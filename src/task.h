@@ -1,14 +1,19 @@
-#ifndef TASK_H
-#define TASK_H
+#ifndef STACCATO_TASK_H
+#define STACCATO_TASK_H
 
 #include <cstdlib>
 #include <atomic>
+
+#include "constants.h"
+
+namespace staccato
+{
 
 class task
 {
 public:
 	task();
-	virtual ~task() {};
+	virtual ~task();
 
 	void spawn(task *t);
 	void wait_for_all();
@@ -22,7 +27,7 @@ private:
 
 	std::atomic_size_t subtask_count;
 
-#ifndef NDEBUG
+#if STACCATO_DEBUG
 	// TODO: moar states
 	enum state_t {
 		undef     = 0,
@@ -31,8 +36,10 @@ private:
 		finished  = 3
 	};
 	state_t state;
-#endif
+#endif // STACCATO_DEBUG
+
 };
 
-#endif /* end of include guard: TASK_H */
+}
 
+#endif /* end of include guard: STACCATO_TASK_H */

@@ -1,8 +1,13 @@
-#ifndef DEQUE_H
-#define DEQUE_H
+#ifndef STACCATO_DEQUE_H
+#define STACCATO_DEQUE_H
 
-#include "utils.h"
+#include "constants.h"
 #include "task.h"
+
+namespace staccato
+{
+namespace internal
+{
 
 class task_deque
 {
@@ -16,9 +21,9 @@ public:
 	static size_t deque_log_size;
 	static size_t tasks_per_steal;
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 	ssize_t size();
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 private:
 	typedef std::atomic<task *> atomic_task;
@@ -27,19 +32,18 @@ private:
 		atomic_task *buffer;
 	} array_t;
 
-	cacheline padding_0;
-	std::atomic_size_t top;
+	STACCATO_ALIGN std::atomic_size_t top;
 
-	cacheline padding_1;
-	std::atomic_size_t bottom;
+	STACCATO_ALIGN std::atomic_size_t bottom;
 
-	cacheline padding_2;
-	std::atomic<array_t *> array;
-	cacheline padding_3;
+	STACCATO_ALIGN std::atomic<array_t *> array;
 
 	size_t load_from(array_t *buffer, size_t top, size_t s);
 
 	void resize();
 };
 
-#endif /* end of include guard: DEQUE_H */
+} // namespace internal
+} // namespace stacccato
+
+#endif /* end of include guard: STACCATO_DEQUE_H */

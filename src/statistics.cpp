@@ -6,6 +6,11 @@
 #include "statistics.h"
 #include "scheduler.h"
 
+namespace staccato
+{
+namespace internal
+{
+
 std::chrono::time_point<std::chrono::steady_clock> statistics::start_time;
 std::chrono::time_point<std::chrono::steady_clock> statistics::stop_time;
 
@@ -13,12 +18,12 @@ thread_local size_t statistics::me;
 statistics::counter *statistics::counters;
 statistics::counter statistics::total = {};
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 std::atomic_bool statistics::terminate_stat_thread(false);
 std::atomic_bool statistics::stat_thread_is_ready(false);
 std::thread *statistics::stat_thread;
 unsigned long statistics::stat_thread_iteratinons;
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 void statistics::initialize()
 {
@@ -26,15 +31,15 @@ void statistics::initialize()
 	counters = new counter[nthreads];
 	me = 0;
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 	stat_thread = new std::thread(stat_thread_loop);
 	while (!stat_thread_is_ready) {};
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 	start_time = std::chrono::steady_clock::now();
 }
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 void statistics::stat_thread_loop()
 {
 	size_t nthreads = scheduler::workers_count + 1;
@@ -63,16 +68,16 @@ void statistics::stat_thread_loop()
 		fprintf(fp, "\n");
 	}
 }
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 void statistics::terminate()
 {
 	stop_time = std::chrono::steady_clock::now();
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 	terminate_stat_thread = true;
 	stat_thread->join();
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 	for (size_t i = 0; i < scheduler::workers_count + 1; i++) {
 		total.put                   += counters[i].put;
@@ -115,7 +120,7 @@ const char *statistics::event_to_str(event e)
 	}
 
 	ASSERT(false, "String name for event " << e << " is not set");
-	return NULL;
+	return nullptr;
 }
 
 unsigned long statistics::get_counter_value(counter *c, event e) {
@@ -176,7 +181,7 @@ void statistics::dump_to_console()
 		fprintf(fp, "%*lu | ", row_width, get_counter_value(&total, (event) e));
 	fprintf(fp, "\n\n");
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 	fprintf(fp, "Stat thread iterations: %lu\n", stat_thread_iteratinons);
 
 	for (size_t i = 0; i < nthreads; i++) {
@@ -188,7 +193,7 @@ void statistics::dump_to_console()
 				(double) stat_thread_iteratinons / events);
 	}
 	fprintf(fp, "\n");
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 	fprintf(fp, "Elapsed time (sec): %f\n\n", dt);
 
@@ -251,3 +256,6 @@ void statistics::count(event e)
 			ASSERT(false, "Undefined event: " << e);
 	}
 }
+
+} // namespace internal
+} // namespace stacccato

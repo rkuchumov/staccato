@@ -1,9 +1,16 @@
-#ifndef STATISTICS_H
-#define STATISTICS_H
+#ifndef STACCATO_STATISTICS_H
+#define STACCATO_STATISTICS_H
 
 #include <atomic>
 #include <thread>
 #include <chrono>
+
+#include "constants.h"
+
+namespace staccato
+{
+namespace internal
+{
 
 class statistics
 {
@@ -43,7 +50,7 @@ private:
 	};
 
 	static counter *counters;
-	static thread_local size_t me;
+	static STACCATO_TLS size_t me;
 
 	static counter total;
 	static void dump_to_console();
@@ -55,15 +62,18 @@ private:
 	static unsigned long get_counter_value(counter *c, event e);
 	static const char *event_to_str(event e);
 
-#if SAMPLE_DEQUES_SIZES
+#if STACCATO_SAMPLE_DEQUES_SIZES
 	static std::thread *stat_thread;
 	static void stat_thread_loop();
 	static std::atomic_bool stat_thread_is_ready;
 	static std::atomic_bool terminate_stat_thread;
 	static unsigned long stat_thread_iteratinons;
-#endif
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 };
 
-#endif /* end of include guard: STATISTICS_H */
+} // namespace internal
+} // namespace stacccato
+
+#endif /* end of include guard: STACCATO_STATISTICS_H */
 

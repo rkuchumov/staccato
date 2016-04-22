@@ -2,6 +2,14 @@
 #include "task.h"
 #include "scheduler.h"
 
+namespace staccato
+{
+
+task::~task()
+{
+
+}
+
 void task::spawn(task *t)
 {
 	t->parent = this;
@@ -15,9 +23,11 @@ void task::wait_for_all()
 	ASSERT(subtask_count == 0, "Task still has subtaks after it task_loop()");
 }
 
-task::task(): parent(NULL), subtask_count(0)
+task::task(): parent(nullptr), subtask_count(0)
 {
-#ifndef NDEBUG
+#if STACCATO_DEBUG
 	state = ready;
-#endif
+#endif // STACCATO_DEBUG
 }
+
+} // namespace stacccato

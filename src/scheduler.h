@@ -1,12 +1,16 @@
-#ifndef SCHEDULER_H
-#define SCHEDULER_H
+#ifndef STACCATO_SCEDULER_H
+#define STACCATO_SCEDULER_H
 
 #include <cstdlib>
 #include <thread>
 
+#include "constants.h"
 #include "task.h"
 #include "deque.h"
 #include "statistics.h"
+
+namespace staccato
+{
 
 class scheduler
 {
@@ -19,32 +23,32 @@ public:
 
 private:
 	friend class task;
-	friend class statistics;
+	friend class internal::statistics;
 
-	scheduler() {};
-	~scheduler() {};
+	scheduler();
+	~scheduler();
 
 	static void check_paramters();
 
 	static void initialize_worker(size_t id);
 	static std::thread **workers;
 
-	cacheline padding_0;
-
 	static void spawn(task *t);
 	static void task_loop(task *parent);
 
-	static thread_local task_deque* my_pool;
+	static STACCATO_TLS internal::task_deque* my_pool;
 
 	static std::atomic_bool is_active;
-	static task_deque *pool;
+	static internal::task_deque *pool;
 	static task *steal_task();
 	static size_t workers_count;
 
-#ifndef NDEBUG
-	static thread_local size_t my_id;
+#if STACCATO_DEBUG
+	static STACCATO_TLS size_t my_id;
 #endif
 };
 
-#endif /* end of include guard: SCHEDULER_H */
+} /* namespace:staccato */ 
+
+#endif /* end of include guard: STACCATO_SCEDULER_H */
 

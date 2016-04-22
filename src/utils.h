@@ -1,18 +1,21 @@
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef STACCATO_UTILS_H
+#define STACCATO_UTILS_H
 
 #include <iostream>
 #include <cassert>
 
-#ifndef LEVEL1_DCACHE_LINESIZE
-#define LEVEL1_DCACHE_LINESIZE 64
-#endif
-typedef char cacheline[LEVEL1_DCACHE_LINESIZE];
+#include "constants.h"
 
-#ifndef NDEBUG
+#if STACCATO_STATISTICS
+#	define COUNT(event) internal::statistics::count(internal::statistics::event);
+#else
+#	define COUNT(event) do {} while (false);
+#endif // STACCATO_STATISTICS
+
+#if STACCATO_DEBUG
 #   define ASSERT(condition, message) \
     do { \
-        if (! (condition)) { \
+        if (!(condition)) { \
             std::cerr << "Assertion `" #condition "` failed in " << __FILE__ \
                       << ":" << __LINE__ << "\n" << message  << "\n" << std::endl; \
             std::exit(EXIT_FAILURE); \
@@ -38,11 +41,9 @@ typedef char cacheline[LEVEL1_DCACHE_LINESIZE];
 #define dec_relaxed(var) (var).fetch_sub(1, std::memory_order_relaxed)
 #define inc_relaxed(var) (var).fetch_add(1, std::memory_order_relaxed)
 
-#ifndef NSTAT
-#    define COUNT(event) statistics::count(statistics::event);
-#else
-#    define COUNT(event) do {} while (false);
-#endif
+
+namespace staccato {
+namespace internal {
 
 inline unsigned long my_rand() {
 	static unsigned long x = 123456789;
@@ -61,9 +62,8 @@ inline unsigned long my_rand() {
 	return z;
 }
 
-#ifndef SAMPLE_DEQUES_SIZES
-#define SAMPLE_DEQUES_SIZES 0
-#endif
+}
+}
 
-#endif /* end of include guard: UTILS_H */
+#endif /* end of include guard: STACCATO_UTILS_H */
 
