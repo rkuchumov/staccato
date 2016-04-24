@@ -2,40 +2,54 @@ SHELL = /bin/sh
 
 CC = g++
 LDFLAGS = -std=c++11 -shared -pthread 
-ALL_FLAGS = -std=c++11 -Wall -Wextra -pedantic -fpic -c
-VARS = -DLEVEL1_DCACHE_LINESIZE=`getconf LEVEL1_DCACHE_LINESIZE`
+ALL_FLAGS = -std=c++11 -fpic -c 
+INCLUDE = -I../include -I../src
 
-# debug version:
-CFLAGS = -g -O0
+ifeq ($(cfg), debug)
+	OBJS_DIR = debug
+	CFLAGS = -Wall -Wextra -Wshadow -Wcast-align -pedantic
+	CFLAGS += -O0 -g
+	VARS += -DSTACCATO_DEBUG=1 -DSTACCATO_STATISTICS=1
+else ifeq ($(cfg), statistics)
+	OBJS_DIR = statistics
+	CFLAGS = -O2
+	VARS += -DSTACCATO_STATISTICS=1
+else
+	OBJS_DIR = release
+	CFLAGS = -O2
+endif
 
-# reliase version:
-CFLAGS = -O2 
-VARS += -DNDEBUG=1 -DNSTAT=1
-
-TARGET = libsch.so
 SRCS = $(wildcard ../src/*.cpp)
-OBJS = $(SRCS:../src/%.cpp=%.o)
+TARGET = $(OBJS_DIR)/libstaccato.so
+OBJS = $(SRCS:../src/%.cpp=$(OBJS_DIR)/%.o)
+
+CACHE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE 2>/dev/null || false)
+ifdef CACHE_SIZE
+	VARS += -DLEVEL1_DCACHE_LINESIZE=$(CACHE_SIZE)
+endif
 
 .PHONY: all
-all: $(TARGET) 
+all: objs_dir $(TARGET) dep
+
+.PHONY: objs_dir
+objs_dir:
+	mkdir -p $(OBJS_DIR)
 
 $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
-%.o: ../src/%.cpp
-	$(CC) $(ALL_FLAGS) $(CFLAGS) $(VARS) $< -o $@
+$(OBJS_DIR)/%.o: ../src/%.cpp
+	$(CC) $(ALL_FLAGS) $(VARS) $(CFLAGS) $(INCLUDE) $< -o $@
 
 .PHONY: clean
 clean:
-	rm $(TARGET) 2>/dev/null || true
-	rm $(OBJS) 2>/dev/null || true
-
-.PHONY: run
-run: $(TARGET)
-	./$(TARGET)
+	rm -rfv $(OBJS_DIR) 2>/dev/null || true
 
 .PHONY: dep
-dep: $(SRCS)
-	$(CC) $(CFLAGS) -MM $^  > .depend
+dep: $(OBJS_DIR)/.depend
 
--include .depend
+$(OBJS_DIR)/.depend: $(SRCS)
+	mkdir -p $(OBJS_DIR)
+	$(CC) $(ALL_FLAGS) $(CFLAGS) $(INCLUDE) -MM $(SRCS) | sed -e  's/.*:/$(OBJS_DIR)\/&/' > $(OBJS_DIR)/.depend
+
+-include $(OBJS_DIR)/.depend
