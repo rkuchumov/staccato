@@ -19,21 +19,17 @@ thread_local size_t scheduler::my_id = 0;
 #endif // STACCATO_DEBUG
 
 scheduler::scheduler()
-{
-
-}
+{ }
 
 scheduler::~scheduler()
-{
-	// TODO: call terminate or something
-}
+{ }
 
 void scheduler::initialize(size_t nthreads)
 {
+	ASSERT(is_active == false, "Schdeler is already initialized");
+
 	if (nthreads == 0)
 		nthreads = std::thread::hardware_concurrency();
-
-	check_paramters();
 
 	internal::task_deque::deque_log_size = deque_log_size;
 	internal::task_deque::tasks_per_steal = tasks_per_steal;
@@ -71,23 +67,14 @@ void scheduler::terminate()
 	internal::statistics::terminate();
 #endif // STACCATO_STATISTICS
 
-	for (size_t i = 0; i < workers_count; i++)
+	for (size_t i = 0; i < workers_count; i++) {
 		workers[i]->join();
-}
-
-void scheduler::check_paramters()
-{
-	if (deque_log_size == 0 || deque_log_size > 31) {
-		deque_log_size = 8;
-		std::cerr << "Incorrect deque size. Restored to 8\n";
+		delete workers[i];
 	}
+	delete []workers;
 
-	if (tasks_per_steal == 0) {
-		tasks_per_steal = 1;
-		std::cerr << "Incorrect number of tasks per steal. Restored to 1\n";
-	}
+	delete []pool;
 }
-
 
 void scheduler::initialize_worker(size_t id)
 {
@@ -117,12 +104,18 @@ void scheduler::task_loop(task *parent)
 		while (true) { // Local tasks loop
 			if (t) {
 #if STACCATO_DEBUG
-				ASSERT(t->state == task::ready, "Task is already taken, state: " << t->state);
-				t->state = task::executing;
+				ASSERT(t->get_state() == task::taken || t->get_state() == task::stolen,
+					"Incorrect task state: " << t->get_state_str());
+				t->set_state(task::executing);
 #endif // STACCATO_DEBUG
+
 				t->execute();
+
 #if STACCATO_DEBUG
-				ASSERT(t->state == task::executing, "");
+				ASSERT(t->get_state() == task::executing,
+					"Incorrect task state: " << t->get_state_str());
+				t->set_state(task::finished);
+
 				ASSERT(t->subtask_count == 0,
 						"Task still has subtaks after it has been executed");
 #endif // STACCATO_DEBUG
@@ -154,6 +147,7 @@ void scheduler::task_loop(task *parent)
 void scheduler::spawn(task *t)
 {
 	ASSERT(my_pool != nullptr, "Task Pool is not initialized");
+
 	my_pool->put(t);
 }
 

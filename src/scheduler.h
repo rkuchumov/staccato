@@ -28,8 +28,6 @@ private:
 	scheduler();
 	~scheduler();
 
-	static void check_paramters();
-
 	static void initialize_worker(size_t id);
 	static std::thread **workers;
 

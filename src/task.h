@@ -18,6 +18,22 @@ public:
 	void spawn(task *t);
 	void wait_for_all();
 
+#if STACCATO_DEBUG
+	enum {
+		undefined    = 0,
+		initializing = 1,
+		spawning     = 2,
+		ready        = 3,
+		taken        = 4,
+		stolen       = 5,
+		executing    = 6,
+		finished     = 7
+	};
+	void set_state(unsigned s);
+	unsigned get_state();
+	const char *get_state_str();
+#endif // STACCATO_DEBUG
+
 	virtual void execute() = 0;
 
 private:
@@ -28,16 +44,8 @@ private:
 	std::atomic_size_t subtask_count;
 
 #if STACCATO_DEBUG
-	// TODO: moar states
-	enum state_t {
-		undef     = 0,
-		ready     = 1,
-		executing = 2,
-		finished  = 3
-	};
-	state_t state;
+	std::atomic_uint state;
 #endif // STACCATO_DEBUG
-
 };
 
 }
