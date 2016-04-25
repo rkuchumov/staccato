@@ -1,7 +1,7 @@
 CC = g++
 CFLAGS = -Wall -Wextra
 
-BUILD_PATH = ../build/
+BUILD_PATH = ../build
 SO_PATH = $(BUILD_PATH)/release
 LIBS = -I../include/ -L$(SO_PATH) -Wl,-rpath=$(SO_PATH) -lstaccato
 ALL_FLAGS = -std=c++11 -pthread
@@ -17,7 +17,7 @@ lib:
 	make -C $(BUILD_PATH) cfg=release
 
 .PHONY: run
-run:
+run: all
 	./$(TARGET)
 
 $(TARGET): $(SRCS) $(HEADERS)
