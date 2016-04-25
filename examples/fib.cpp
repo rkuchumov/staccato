@@ -5,7 +5,7 @@
 using namespace std;
 using namespace staccato;
 
-class FibTask: public staccato::task
+class FibTask: public task
 {
 public:
 	FibTask (int n_, long *sum_): n(n_), sum(sum_)
