@@ -12,7 +12,7 @@ ifeq ($(cfg), debug)
 	VARS += -DSTACCATO_DEBUG=1 -DSTACCATO_STATISTICS=1
 else ifeq ($(cfg), statistics)
 	OBJS_DIR = statistics
-	CFLAGS = -O2
+	CFLAGS = -O2 -g
 	VARS += -DSTACCATO_STATISTICS=1
 else
 	OBJS_DIR = release
@@ -23,9 +23,11 @@ SRCS = $(wildcard ../src/*.cpp)
 TARGET = $(OBJS_DIR)/libstaccato.so
 OBJS = $(SRCS:../src/%.cpp=$(OBJS_DIR)/%.o)
 
-CACHE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE 2>/dev/null || false)
-ifdef CACHE_SIZE
+CACHE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
+ifdef $(CACHE_SIZE)
+ifneq ($(CACHE_SIZE), 0)
 	VARS += -DLEVEL1_DCACHE_LINESIZE=$(CACHE_SIZE)
+endif
 endif
 
 .PHONY: all
