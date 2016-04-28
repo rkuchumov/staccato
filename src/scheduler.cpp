@@ -156,7 +156,7 @@ task *scheduler::steal_task()
 	ASSERT(workers_count != 0, "Stealing when scheduler has a single worker");
 
 	size_t n = workers_count + 1; // +1 for master
-	size_t victim_id = internal::my_rand() % n;
+	size_t victim_id = internal::xorshift_rand() % n;
 	internal::task_deque *victim_pool = &pool[victim_id];
 	if (victim_pool == my_pool)
 		victim_pool = &pool[(victim_id + 1) % n];

@@ -41,25 +41,16 @@
 #define dec_relaxed(var) (var).fetch_sub(1, std::memory_order_relaxed)
 #define inc_relaxed(var) (var).fetch_add(1, std::memory_order_relaxed)
 
-
 namespace staccato {
 namespace internal {
 
-inline unsigned long my_rand() {
-	static unsigned long x = 123456789;
-	static unsigned long y = 362436069;
-	static unsigned long z = 521288629;
+inline uint32_t xorshift_rand() {
+	STACCATO_TLS static uint32_t x = 2463534242;
 
-	x ^= x << 16;
+	x ^= x >> 13;
+	x ^= x << 17;
 	x ^= x >> 5;
-	x ^= x << 1;
-
-	unsigned long t = x;
-	x = y;
-	y = z;
-	z = t ^ x ^ y;
-
-	return z;
+	return x;
 }
 
 }

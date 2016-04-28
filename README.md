@@ -8,8 +8,6 @@ This is my C++11 implementation of concurrent work-stealing task scheduler. It h
  2. Allows to change the number of tasks removed per single steal
  3. Allows to collect statistical information about scheduler behavior
 
-----------------
-
 How it works
 ------------------
 

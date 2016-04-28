@@ -24,7 +24,7 @@ TARGET = $(OBJS_DIR)/libstaccato.so
 OBJS = $(SRCS:../src/%.cpp=$(OBJS_DIR)/%.o)
 
 CACHE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
-ifdef $(CACHE_SIZE)
+ifdef CACHE_SIZE
 ifneq ($(CACHE_SIZE), 0)
 	VARS += -DLEVEL1_DCACHE_LINESIZE=$(CACHE_SIZE)
 endif
