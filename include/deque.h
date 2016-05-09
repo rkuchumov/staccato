@@ -22,7 +22,7 @@ public:
 	static size_t tasks_per_steal;
 
 #if STACCATO_SAMPLE_DEQUES_SIZES
-	ssize_t size();
+	size_t get_top();
 #endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 private:

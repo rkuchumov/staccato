@@ -9,7 +9,8 @@ namespace staccato
 namespace internal
 {
 
-size_t task_deque::deque_log_size = 8;
+// TODO: remove it, use scheduler::log_szie;
+size_t task_deque::deque_log_size = 6;
 size_t task_deque::tasks_per_steal = 1;
 
 task_deque::task_deque()
@@ -209,12 +210,9 @@ void task_deque::resize()
 }
 
 #if STACCATO_SAMPLE_DEQUES_SIZES
-ssize_t task_deque::size()
+size_t task_deque::get_top()
 {
-	size_t t = load_consume(top);
-	size_t b = load_consume(bottom);
-
-	return (ssize_t) b - t;
+	return load_consume(top);
 }
 #endif // STACCATO_SAMPLE_DEQUES_SIZES
 

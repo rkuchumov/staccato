@@ -19,6 +19,8 @@ statistics::counter *statistics::counters;
 statistics::counter statistics::total = {};
 
 #if STACCATO_SAMPLE_DEQUES_SIZES
+statistics::atomic_counter *statistics::atomic_counters;
+
 std::atomic_bool statistics::terminate_stat_thread(false);
 std::atomic_bool statistics::stat_thread_is_ready(false);
 std::thread *statistics::stat_thread;
@@ -32,6 +34,8 @@ void statistics::initialize()
 	me = 0;
 
 #if STACCATO_SAMPLE_DEQUES_SIZES
+	atomic_counters = new atomic_counter[nthreads];
+
 	stat_thread = new std::thread(stat_thread_loop);
 	while (!stat_thread_is_ready) {};
 #endif // STACCATO_SAMPLE_DEQUES_SIZES
@@ -44,27 +48,53 @@ void statistics::stat_thread_loop()
 {
 	size_t nthreads = scheduler::workers_count + 1;
 
-	// XXX: probably it would be faster to store vector of arrays or something
-	std::vector<ssize_t> *v = new std::vector<ssize_t>[scheduler::workers_count + 1];
+	sample *v = new sample[max_samples];
+	for (size_t i = 0; i < max_samples; i++)
+		v[i].counters = new unsigned int[3 * nthreads]();
+	// XXX: I have no time do it nice way :)
 
 	stat_thread_is_ready = true;
 	while (!scheduler::is_active) { } // Wait until schedulter starts
 
-	while (!terminate_stat_thread) {
-		stat_thread_iteratinons++;
+	bool is_limit_reached = false;
 
-		for (size_t i = 0; i < nthreads; i++)
-			v[i].push_back(scheduler::pool[i].size());
+	while (!terminate_stat_thread) {
+		size_t id = stat_thread_iteratinons;
+		if (id >= max_samples) {
+			is_limit_reached = true;
+			id = max_samples - 1; // So that thread does same work and won't mess up with stat.
+		}
+
+		for (size_t i = 0; i < nthreads; i++) {
+			v[id].counters[3 * i] = load_consume(atomic_counters[i].bottom_inc);
+			v[id].counters[3 * i + 1] = load_consume(atomic_counters[i].bottom_dec);
+			v[id].counters[3 * i + 2] = scheduler::pool[i].get_top() - 1;
+		}
+
+		v[id].time = rdtsc();
+
+		stat_thread_iteratinons++;
 	}
 
+	if (is_limit_reached)
+		std::cerr << "Sample limit is reached (" << max_samples << "), " <<
+			"ignoring the rest\n";
+
 	FILE *fp = fopen("scheduler_deque_sizes.tab", "w");
-	for (size_t i = 0; i < nthreads; i++)
-		fprintf(fp, "Deque%zd\t", i);
+	fprintf(fp, "Time\t");
+	for (size_t i = 0; i < nthreads; i++) {
+		fprintf(fp, "Deque%zd.b_inc\t", i);
+		fprintf(fp, "Deque%zd.b_dec\t", i);
+		fprintf(fp, "Deque%zd.t_inc\t", i);
+	}
 	fprintf(fp, "\n");
 
-	for (size_t j = 0; j < v[0].size(); j++) {
-		for (size_t i = 0; i < nthreads; i++)
-			fprintf(fp, "%ld ", v[i][j]);
+	size_t last = is_limit_reached ? max_samples : stat_thread_iteratinons;
+	for (size_t i = 0; i < last; i++) {
+		fprintf(fp, "%lu\t", v[i].time);
+
+		for (size_t j = 0; j < 3 * nthreads; j++)
+			fprintf(fp, "%u\t", v[i].counters[j]);
 		fprintf(fp, "\n");
 	}
 }
@@ -94,7 +124,7 @@ void statistics::terminate()
 	dump_counters_to_file();
 }
 
-const char *statistics::event_to_str(event e)
+const char *statistics::event_to_str(unsigned e)
 {
 	switch (e) {
 		case noop:
@@ -123,7 +153,7 @@ const char *statistics::event_to_str(event e)
 	return nullptr;
 }
 
-unsigned long statistics::get_counter_value(counter *c, event e) {
+unsigned long statistics::get_counter_value(counter *c, unsigned e) {
 	switch (e) {
 		case take:
 			return c->take;
@@ -154,7 +184,9 @@ void statistics::dump_to_console()
 	FILE *fp = stderr;
 	const static int row_width = 10;
 	size_t nthreads = scheduler::workers_count + 1;
-	double dt = (double) std::chrono::duration_cast<std::chrono::microseconds>(stop_time - start_time).count() / 1000000;
+	double dt = static_cast<double> 
+		(std::chrono::duration_cast<std::chrono::microseconds>(stop_time - start_time).count())
+		/ 1000000;
 
 	fprintf(fp, "============= Scheduler Statistics (start) =============\n");
 	fprintf(fp, "Threads: %zd\n", nthreads);
@@ -164,21 +196,21 @@ void statistics::dump_to_console()
 
 	fprintf(fp, "Thr  | ");
 	for (size_t i = put; i <= resize; i++)
-		fprintf(fp, "%*s | ", row_width, event_to_str((event) i));
+		fprintf(fp, "%*s | ", row_width, event_to_str(i));
 	fprintf(fp, "\n");
 
 	for (size_t i = 0; i < nthreads; i++) {
 		fprintf(fp, "W%-3zd | ", i);
 
 		for (size_t e = put; e <= resize; e++)
-			fprintf(fp, "%*lu | ", row_width, get_counter_value(&counters[i], (event) e));
+			fprintf(fp, "%*lu | ", row_width, get_counter_value(&counters[i], e));
 
 		fprintf(fp, "\n");
 	}
 
 	fprintf(fp, "Tot  | ");
 	for (size_t e = put; e <= resize; e++)
-		fprintf(fp, "%*lu | ", row_width, get_counter_value(&total, (event) e));
+		fprintf(fp, "%*lu | ", row_width, get_counter_value(&total, e));
 	fprintf(fp, "\n\n");
 
 #if STACCATO_SAMPLE_DEQUES_SIZES
@@ -207,13 +239,13 @@ void statistics::dump_counters_to_file()
 	size_t nthreads = scheduler::workers_count + 1;
 
 	for (size_t i = noop; i <= resize; i++)
-		fprintf(fp, "%s\t", event_to_str((event) i));
+		fprintf(fp, "%s\t", event_to_str(i));
 	fprintf(fp, "\n");
 
 	for (size_t i = 0; i < nthreads; i++) {
 		fprintf(fp, "W%zd\t", i);
 		for (size_t e = put; e <= resize; e++)
-			fprintf(fp, "%zd\t", get_counter_value(&counters[i], (event) e));
+			fprintf(fp, "%zd\t", get_counter_value(&counters[i], e));
 		fprintf(fp, "\n");
 	}
 
@@ -230,9 +262,17 @@ void statistics::count(event e)
 	switch (e) {
 		case put:
 			counters[me].put++;
+
+#if STACCATO_SAMPLE_DEQUES_SIZES
+			inc_relaxed(atomic_counters[me].bottom_inc);
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 			break;
 		case take:
 			counters[me].take++;
+
+#if STACCATO_SAMPLE_DEQUES_SIZES
+			inc_relaxed(atomic_counters[me].bottom_dec);
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
 			break;
 		case take_failed:
 			counters[me].take_failed++;

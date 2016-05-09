@@ -49,6 +49,12 @@ private:
 		unsigned long resize;
 	};
 
+	struct atomic_counter
+	{
+		std::atomic_ulong bottom_inc;
+		std::atomic_ulong bottom_dec;
+	};
+
 	static counter *counters;
 	static STACCATO_TLS size_t me;
 
@@ -59,10 +65,19 @@ private:
 	static std::chrono::time_point<std::chrono::steady_clock> start_time;
 	static std::chrono::time_point<std::chrono::steady_clock> stop_time;
 
-	static unsigned long get_counter_value(counter *c, event e);
-	static const char *event_to_str(event e);
+	static unsigned long get_counter_value(counter *c, unsigned e);
+	static const char *event_to_str(unsigned e);
 
 #if STACCATO_SAMPLE_DEQUES_SIZES
+	static atomic_counter *atomic_counters;
+
+	struct sample
+	{
+		uint64_t time;
+		unsigned int *counters;
+	};
+
+	static const size_t max_samples = 1e8;
 	static std::thread *stat_thread;
 	static void stat_thread_loop();
 	static std::atomic_bool stat_thread_is_ready;

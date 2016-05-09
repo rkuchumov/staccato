@@ -53,6 +53,36 @@ inline uint32_t xorshift_rand() {
 	return x;
 }
 
+#if STACCATO_SAMPLE_DEQUES_SIZES
+
+inline uint64_t rdtsc()
+{
+    uint32_t hi, lo;
+
+#if defined(__i386__)
+	asm volatile("RDTSCP\n\t"
+		"mov %%edx, %0\n\t"
+		"mov %%eax, %1\n\t"
+		"CPUID\n\t"
+		: "=r" (hi), "=r" (lo)
+		:: "%eax", "%ebx", "%ecx", "%edx");
+#elif defined(__x86_64__)
+	asm volatile("RDTSCP\n\t"
+		"mov %%edx, %0\n\t"
+		"mov %%eax, %1\n\t"
+		"CPUID\n\t"
+		: "=r" (hi), "=r" (lo)
+		:: "%rax", "%rbx", "%rcx", "%rdx");
+#else
+#error "You can't use STACCATO_SAMPLE_DEQUES_SIZES=1 on this machine. \
+	Support of RDTSCP is not implemented"
+#endif
+
+    return (static_cast<uint64_t> (hi) << 32) | lo;
+}
+
+#endif // STACCATO_SAMPLE_DEQUES_SIZES
+
 }
 }
 

@@ -11,7 +11,7 @@ size_t scheduler::workers_count = 0;
 internal::task_deque *scheduler::pool;
 thread_local internal::task_deque* scheduler::my_pool;
 
-size_t scheduler::deque_log_size = 8;
+size_t scheduler::deque_log_size = 6;
 size_t scheduler::tasks_per_steal = 1;
 
 #if STACCATO_DEBUG
