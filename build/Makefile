@@ -13,7 +13,7 @@ ifeq ($(cfg), debug)
 else ifeq ($(cfg), statistics)
 	OBJS_DIR = statistics
 	CFLAGS = -O2 -g
-	VARS += -DSTACCATO_STATISTICS=1
+	VARS += -DSTACCATO_STATISTICS=1 -DSTACCATO_SAMPLE_DEQUES_SIZES=0
 else
 	OBJS_DIR = release
 	CFLAGS = -O2
