@@ -7,49 +7,55 @@
 #include <iomanip>
 #include <float.h>
 #include <vector>
+
 using namespace std;
 
 // Parameters:
-int nprocessors        = 4;
-const double lambdas[] = {0.5, 0.7, 0.8, 0.9, 0.95, 0.999};
-const double mu        = 1;
+int nprocessors          = 4;
+const double lambdas[]   = {0.5, 0.7, 0.8, 0.9, 0.95, 0.999};
+const double mu          = 1;
+const double steal_sleep = 0.05;
 
 const int     steal_size_from = 1;
 const int     steal_size_to   = 20;
 
-const double  max_time        = 3000;
-const int     iterations      = 1000;
+const double  max_time        = 1000;
+const int     iterations      = 300;
 
-// Counters:
-double   total_delay      =   0;
-long     tasks_executed   =   0;
-long     total_arrivals   =   0;
-double   total_steals     =   0;
-double   total_steals_sq  =   0;
-double   queue_size       =   0;
-
-long   run_steals = 0;
-
-void print_header();
-void reset_counters();
-void print_counters();
-
+// Debug:
 #if 0
 #define D(x) (x)
 #else
 #define D(x)
 #endif
 
+struct counters_t
+{
+	double  steals;
+	double  delay;
+	double  queue;
+	double  executed;
+	double  arrivals;
+	double  empty;
+};
+
+counters_t iter_counters;
+counters_t counters;
+counters_t counters_square;
+
+void print_header();
+void reset_counters();
+void print_counters();
+void update_counters();
+
+// Current iteration values:
+double now          = 0;
+double dt           = 1;
+double lambda       = 0.5;
+int    steal_size   = 1;
+
 #define LENGTH(array) static_cast<size_t> (sizeof(array) / sizeof(array[0]))
-
 inline double poisson(double lambda);
-inline double unif(double a, double b);
-inline int d_unif(int s);
-
-double now = 0;
-double dt  = 1;
-double lambda = 0.5;
-int      steal_size    =   1;
 
 struct task_t
 {
@@ -62,7 +68,7 @@ struct task_t
 		service_time = poisson(mu);
 		start_time = -1;
 
-		total_arrivals++;
+		iter_counters.arrivals++;
 	}
 
 	void print() {
@@ -84,13 +90,18 @@ struct processor_t
 		current_task = NULL;
 		next_arrival = 0;
 		queue.clear();
+		empty_since = 0;
 	}
 
 	void execute(task_t *t) {
 		assert(current_task == NULL);
 		current_task = t;
 		t->start_time = now;
-		total_delay += now - t->arrive_time;
+		iter_counters.delay += now - t->arrive_time;
+
+		if (empty_since != 0)
+			iter_counters.empty += (now - empty_since);
+		empty_since = 0;
 	}
 
 	void finish() {
@@ -101,7 +112,10 @@ struct processor_t
 		delete current_task;
 		current_task = NULL;
 
-		tasks_executed++;
+		iter_counters.executed++;
+
+		if (queue.size() == 0)
+			empty_since = now;
 	}
 
 	void put(task_t *t) {
@@ -135,6 +149,7 @@ struct processor_t
 		return true;
 	}
 
+	double empty_since;
 	task_t *current_task;
 	double next_arrival;
 	deque<task_t *> queue;
@@ -145,6 +160,7 @@ processor_t *processors;
 task_t *steal_task(int thief);
 double min_arrival();
 double min_departure();
+double min_steal();
 
 void run();
 
@@ -168,30 +184,26 @@ int main(int argc, char *argv[]) {
 		lambda = lambdas[l];
 
 		for (steal_size = steal_size_from; steal_size <= steal_size_to; steal_size++) {
-			reset_counters();
-			for (int iter = 0; iter < iterations; iter++) {
+			counters = (counters_t) {};
+			counters_square = (counters_t) {};
 
-				run_steals = 0;
+			for (int iter = 0; iter < iterations; iter++) {
+				iter_counters = (counters_t) {};
 
 				run();
 
-				total_steals += static_cast<double> (run_steals) / iterations;
-				total_steals_sq += static_cast<double> (run_steals * run_steals) / iterations;
-
+				update_counters();
 			}
 			print_counters();
-
 		}
 	}
 
 	cout << "\n";
 
-
 	return 0;
 }
 
-void run()
-{
+void run() {
 	now = 0;
 
 	for (int i = 0; i < nprocessors; i++)
@@ -200,10 +212,12 @@ void run()
 	bool is_interval  = true;
 	bool is_arrival   = true;
 	bool is_departure = false;
+	bool is_steal     = false;
 
 	double next_arrival   = 0;
 	double next_departure = 0;
 	double next_interval  = 0;
+	double next_steal     = 0;
 
 	while (1) {
 		if (is_arrival) {
@@ -254,6 +268,24 @@ void run()
 			}
 		}
 
+		if (is_steal) {
+			for (int j = 0; j < nprocessors; j++) {
+				if (processors[j].current_task != NULL)
+					continue;
+
+				D(cout << "ste(" << j << "):   ");
+
+				task_t *t = steal_task(j);
+				if (t) {
+					t->print();
+					D(cout << "\n");
+					processors[j].execute(t);
+				} else {
+					D(cout << "fail\n");
+				}
+			}
+		}
+
 		if (is_interval) {
 			if (now >= max_time)
 				break;
@@ -261,7 +293,7 @@ void run()
 			next_interval += dt;
 
 			for (int i = 0; i < nprocessors; i++)
-				queue_size += static_cast <double> (processors[i].queue.size()) /
+				iter_counters.queue += static_cast <double> (processors[i].queue.size()) /
 					(nprocessors * max_time);
 
 			D(cout << "\n---------------------- " << now << " ----------------------------\n");
@@ -270,23 +302,30 @@ void run()
 		is_arrival   = false;
 		is_departure = false;
 		is_interval  = false;
+		is_steal     = false;
 
-		next_arrival = min_arrival();
+		next_arrival   = min_arrival();
 		next_departure = min_departure();
+		next_steal     = min_steal();
 
-		if (next_interval <= min(next_arrival, next_departure)) {
+		if (next_interval <= min(next_arrival, min(next_departure, next_steal))) {
 			now = next_interval;
 			is_interval = true;
 		}
 
-		if (next_arrival <= min(next_interval, next_departure)) {
+		if (next_arrival <= min(next_interval, min(next_departure, next_steal))) {
 			now = next_arrival;
 			is_arrival = true;
 		}
 
-		if (next_departure <= min(next_interval, next_arrival)) {
+		if (next_departure <= min(next_interval, min(next_arrival, next_steal))) {
 			now = next_departure;
 			is_departure = true;
+		}
+
+		if (next_steal <= min(next_arrival, min(next_departure, next_interval))) {
+			now = next_steal;
+			is_steal = true;
 		}
 	}
 
@@ -303,7 +342,7 @@ task_t *steal_task(int thief)
 		}
 	}
 
-	run_steals++;
+	iter_counters.steals++;
 
 	if (victims.size() == 0)
 		return NULL;
@@ -352,62 +391,91 @@ double min_departure()
 	return m;
 }
 
+double min_steal()
+{
+	for (int j = 0; j < nprocessors; j++) {
+		if (processors[j].current_task != NULL)
+			continue;
+
+		return now + steal_sleep;
+	}
+
+	return FLT_MAX;
+}
+
 inline double poisson(double lambda) 
 {
 	double r = static_cast<double> (rand()) / RAND_MAX;
 	return -log(r) / lambda;
 }
 
-inline double unif(double a, double b)
+void update_counters()
 {
-	double r = static_cast<double> (rand()) / RAND_MAX;
-	return (b - a) * r + a;
-}
+	counters.steals += iter_counters.steals / iterations;
+	counters_square.steals
+		+= (iter_counters.steals * iter_counters.steals) / (iterations - 1);
 
-inline int d_unif(int s)
-{
-	double r = static_cast<double> (rand()) / RAND_MAX;
-	return floor(r * s) + 1;
-}
+	counters.delay += iter_counters.delay / iterations;
+	counters_square.delay
+		+= (iter_counters.delay * iter_counters.delay) / (iterations - 1);
 
-void reset_counters()
-{
-	total_delay     = 0;
-	tasks_executed  = 0;
-	total_arrivals  = 0;
-	total_steals    = 0;
-	total_steals_sq = 0;
-	queue_size      = 0;
+	counters.queue += iter_counters.queue / iterations;
+	counters_square.queue
+		+= (iter_counters.queue * iter_counters.queue) / (iterations - 1);
+
+	counters.executed += iter_counters.executed / iterations;
+	counters_square.executed 
+		+= (iter_counters.executed * iter_counters.executed) / (iterations - 1);
+
+	counters.arrivals += iter_counters.arrivals / iterations;
+	counters_square.arrivals
+		+= (iter_counters.arrivals * iter_counters.arrivals) / (iterations - 1);
+
+	counters.empty += iter_counters.empty / iterations;
+	counters_square.empty
+		+= (iter_counters.empty * iter_counters.empty) / (iterations - 1);
 }
 
 void print_header()
 {
-	cout << "lambda\t";
-	cout << "k\t";
-	cout << "delay\t";
-	cout << "steals\t";
-	cout << "steals.sd\t";
-	cout << "queue\t";
+	cout << "rate;   ";
+	cout << "k;  ";
+
+	cout << "steals;\t\t"   << "steals.sd;\t";
+	cout << "delay;\t\t"    << "delay.sd;\t";
+	cout << "queue;\t\t"    << "queue.sd;\t";
+	cout << "executed;\t" << "executed.sd;\t";
+	cout << "arrivals;\t" << "arrivals.sd;\t";
+	cout << "empty;\t\t" << "empty.sd;\t";
+
 	cout << "\n";
 }
 
 void print_counters()
 {
-	tasks_executed /= iterations;
-	queue_size /= iterations;
-	total_delay /= (tasks_executed * iterations);
+	double k = static_cast<double> (iterations) / (iterations - 1);
 
-	double steals_sd = sqrt(total_steals_sq - total_steals * total_steals);
+	counters_t std_dev;
+	std_dev.steals   = sqrt(counters_square.steals   - k * counters.steals * counters.steals);
+	std_dev.delay    = sqrt(counters_square.delay    - k * counters.delay * counters.delay);
+	std_dev.queue    = sqrt(counters_square.queue    - k * counters.queue * counters.queue);
+	std_dev.executed = sqrt(counters_square.executed - k * counters.executed * counters.executed);
+	std_dev.arrivals = sqrt(counters_square.arrivals - k * counters.arrivals * counters.arrivals);
+	std_dev.empty    = sqrt(counters_square.empty    - k * counters.empty * counters.empty);
 
-	cout.precision(5);
+	cout.setf(ios::fixed, ios::floatfield);
+	cout.precision(3);
+	cout << lambda << "; ";
+	cout << setw(2) << steal_size << ";  ";
 
-	cout << lambda << "\t";
-	cout << steal_size << "\t";
+	cout.precision(6);
 
-	cout << total_delay << "\t";
-	cout << total_steals << "\t";
-	cout << steals_sd << "\t";
-	cout << queue_size << "\t";
+	cout << counters.steals   << ";\t" << std_dev.steals   << ";\t";
+	cout << counters.delay    << ";\t" << std_dev.delay    << ";\t";
+	cout << counters.queue    << ";\t" << std_dev.queue    << ";\t";
+	cout << counters.executed << ";\t" << std_dev.executed << ";\t";
+	cout << counters.arrivals << ";\t" << std_dev.arrivals << ";\t";
+	cout << counters.empty    << ";\t" << std_dev.empty    << ";\t";
 
 	cout << endl;
 }
