@@ -18,7 +18,11 @@ task_deque::task_deque()
 	ASSERT(deque_log_size > 0 && deque_log_size < 32, "Incorrect deque size.");
 	ASSERT(tasks_per_steal > 0, "Incorrect number of tasks per steal.");
 
-	top = 1;
+	stamped_size_t tt;
+	tt.stamp = 0;
+	tt.value = 1;
+
+	top = tt;
 	bottom = 1;
 
 	array_t *a = new array_t;
@@ -31,7 +35,7 @@ task_deque::task_deque()
 void task_deque::put(task *new_task)
 {
 	size_t b = load_relaxed(bottom);
-	size_t t = load_acquire(top);
+	size_t t = load_acquire(top).value;
 
 	array_t *a = load_relaxed(array);
 
@@ -58,7 +62,7 @@ void task_deque::put(task *new_task)
 size_t task_deque::load_from(array_t *other, size_t other_top, size_t size)
 {
 	size_t b = load_relaxed(bottom);
-	size_t t = load_acquire(top);
+	size_t t = load_acquire(top).value;
 
 	array_t *a = load_relaxed(array);
 
@@ -82,49 +86,39 @@ task *task_deque::take()
 	size_t b = dec_relaxed(bottom) - 1;
 	array_t *a = load_relaxed(array);
 	atomic_fence_seq_cst();
-	size_t t = load_relaxed(top);
+	stamped_size_t t = load_relaxed(top);
 
-	if (t > b) { // Deque was empty, restoring to empty state
+	// Deque was empty, restoring to empty state
+	if (t.value > b) {
 		store_relaxed(bottom, b + 1);
 		return nullptr;
 	}
 
-	if ((t + (tasks_per_steal - 1)) >= b) {
-		// Deque had less or equal tasks tnan steal amount
-
-		task *r = load_relaxed(a->buffer[t & a->size_mask]);
-
-		if (!cas_strong(top, t, t + 1)) { // Check if they are not stollen
-			r = nullptr;
-			COUNT(take_failed);
-		} else {
-			COUNT(take);
-		}
-
-#if STACCATO_DEBUG
-		if (r) {
-			ASSERT(r->get_state() == task::ready,
-					"Incorrect task state: " << r->get_state_str());
-			r->set_state(task::taken);
-		}
-
-		ASSERT(bottom == b, "Bottom must point to the last task, as we decremented it");
-#endif // STACCATO_DEBUG
-
-		store_relaxed(bottom, b + 1);
-		return r;
-	}
-
-	COUNT(take);
 	task *r = load_relaxed(a->buffer[b & a->size_mask]);
+
+	if (t.value + (tasks_per_steal - 1) >= b) {
+		// Deque had less or equal number of tasks than steal amount
+		
+		stamped_size_t tt;
+		tt.value = t.value;
+		tt.stamp = t.stamp + 1;
+
+		// Check if they are not stollen
+		if (!cas_strong(top, t, tt)) {
+			bottom = b + 1;
+			COUNT(take_failed);
+			return nullptr;
+		}
+	}
 
 #if STACCATO_DEBUG
 	ASSERT(r != nullptr, "Taken NULL task from non-empty deque");
 	ASSERT(r->get_state() == task::ready,
-		"Incorrect task state: " << r->get_state_str());
+			"Incorrect task state: " << r->get_state_str());
 	r->set_state(task::taken);
 #endif // STACCATO_DEBUG
 
+	COUNT(take);
 	return r;
 }
 
@@ -132,28 +126,32 @@ task *task_deque::steal(task_deque *thief)
 {
 	ASSERT(this != thief, "Stealing from own deque");
 
-	size_t t = load_acquire(top);
+	stamped_size_t t = load_acquire(top);
 	atomic_fence_seq_cst();
 	size_t b = load_acquire(bottom);
 
-	if (t >= b) // Deque is empty
+	if (t.value >= b) // Deque is empty
 		return nullptr;
 
 	array_t *a = load_consume(array);
 
-	task *r = load_relaxed(a->buffer[t & a->size_mask]);
+	task *r = load_relaxed(a->buffer[t.value & a->size_mask]);
 
-	if (tasks_per_steal == 1 || b - t < tasks_per_steal) {
+	if (tasks_per_steal == 1 || b - t.value < tasks_per_steal) {
 		// Victim doesn't have required amount of tasks
-		if (!cas_weak(top, t, t + 1)) {// Stealing one task
+		stamped_size_t tt;
+		tt.value = t.value + 1;
+		tt.stamp = t.stamp + 1;
+
+		if (!cas_weak(top, t, tt)) {
 			COUNT(single_steal_failed);
-			return nullptr; 
+			return nullptr;
 		}
 
 #if STACCATO_DEBUG
 		ASSERT(r != nullptr, "Stolen NULL task");
 		ASSERT(r->get_state() == task::ready,
-			"Incorrect task state: " << r->get_state_str());
+				"Incorrect task state: " << r->get_state_str());
 		r->set_state(task::stolen);
 #endif // STACCATO_DEBUG
 
@@ -162,10 +160,13 @@ task *task_deque::steal(task_deque *thief)
 	}
 
 	// Moving tasks to thief deque without updating its bottom index (in case of failed steal)
-	size_t thief_b = thief->load_from(a, t + 1, tasks_per_steal - 1);
+	size_t thief_b = thief->load_from(a, t.value + 1, tasks_per_steal - 1);
 
 	// Moved tasks could be stolen or one task could be taken by owner
-	if (!cas_weak(top, t, t + tasks_per_steal)) {
+	stamped_size_t tt;
+	tt.value = t.value + tasks_per_steal;
+	tt.stamp = t.stamp + 1;
+	if (!cas_weak(top, t, tt)) {
 		COUNT(multiple_steal_failed);
 		return nullptr; 
 	}
@@ -194,7 +195,7 @@ void task_deque::resize()
 	a->size_mask = (old->size_mask << 1) | 1;
 	a->buffer = new atomic_task[a->size_mask + 1];
 
-	size_t t = load_relaxed(top);
+	size_t t = load_relaxed(top).value;
 	size_t b = load_relaxed(bottom);
 	for (size_t i = t; i < b; i++) {
 		task *item = load_relaxed(old->buffer[i & old->size_mask]);
@@ -212,7 +213,7 @@ void task_deque::resize()
 #if STACCATO_SAMPLE_DEQUES_SIZES
 size_t task_deque::get_top()
 {
-	return load_consume(top);
+	return load_consume(top).value;
 }
 #endif // STACCATO_SAMPLE_DEQUES_SIZES
 

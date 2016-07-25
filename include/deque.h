@@ -32,7 +32,13 @@ private:
 		atomic_task *buffer;
 	} array_t;
 
-	STACCATO_ALIGN std::atomic_size_t top;
+	struct stamped_size_t
+	{
+		size_t value;
+		size_t stamp;
+	};
+
+	STACCATO_ALIGN std::atomic<stamped_size_t> top;
 
 	STACCATO_ALIGN std::atomic_size_t bottom;
 

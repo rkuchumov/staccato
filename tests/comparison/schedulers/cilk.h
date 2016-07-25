@@ -40,7 +40,7 @@ public:
 class cilk_sheduler: public abstact_sheduler<cilk_task>
 {
 public:
-	cilk_sheduler(size_t nthreads = 0) {
+	cilk_sheduler(size_t nthreads = 0, size_t = 0) {
 		string s = to_string(nthreads);
 		__cilkrts_set_param("nworkers", s.c_str());
 		__cilkrts_init();

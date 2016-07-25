@@ -14,7 +14,8 @@ task::task():
 { }
 
 task::~task()
-{ }
+{
+}
 
 void task::spawn(task *t)
 {

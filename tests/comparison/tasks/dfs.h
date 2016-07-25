@@ -50,10 +50,10 @@ template<typename scheduler, typename task, bool no_del = false>
 class dfs_test: public abstract_test
 {
 public:
-	dfs_test(string name_, int breadth_ = 300, int depth_ = 3, size_t nthreads = 0) 
+	dfs_test(string name_, int breadth_ = 300, int depth_ = 3, size_t nthreads = 0, size_t k = 0) 
 		: abstract_test(name_), breadth(breadth_), depth(depth_)
 	{
-		sh = new scheduler(nthreads);
+		sh = new scheduler(nthreads, k);
 	}
 
 	~dfs_test() {
@@ -70,6 +70,14 @@ public:
 
 	bool check() {
 		return total = pow(breadth, depth);
+	}
+
+	unsigned long get_steals() {
+		return sh->get_steals();
+	}
+
+	double get_delay() {
+		return sh->get_delay();
 	}
 
 	void break_down() {

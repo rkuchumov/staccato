@@ -34,9 +34,6 @@ public:
 
 	static void count(event e);
 
-private:
-	statistics();
-
 	struct counter
 	{
 		unsigned long put;
@@ -48,6 +45,12 @@ private:
 		unsigned long multiple_steal_failed;
 		unsigned long resize;
 	};
+
+	static counter get_counters();
+
+private:
+	statistics();
+
 
 	struct atomic_counter
 	{
@@ -77,7 +80,7 @@ private:
 		unsigned int *counters;
 	};
 
-	static const size_t max_samples = 1e8;
+	static const size_t max_samples = 1e7;
 	static std::thread *stat_thread;
 	static void stat_thread_loop();
 	static std::atomic_bool stat_thread_is_ready;

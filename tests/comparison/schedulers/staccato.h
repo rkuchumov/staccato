@@ -39,8 +39,33 @@ public:
 class staccato_scheduler: public abstact_sheduler<staccato_task>
 {
 public:
-	staccato_scheduler(size_t nthreads = 0) {
+	staccato_scheduler(size_t nthreads = 0, size_t k = 0) {
+		if (k > 0) {
+			staccato::scheduler::deque_log_size = 12;
+			staccato::scheduler::tasks_per_steal = k;
+		}
+
 		staccato::scheduler::initialize(nthreads);
+	}
+
+	unsigned long get_steals() {
+#if STACCATO_STATISTICS
+		unsigned long r =
+			staccato::internal::statistics::get_counters().single_steal +
+			staccato::internal::statistics::get_counters().multiple_steal;
+
+		return r;
+#endif
+		return 0;
+	}
+
+	unsigned long get_delay() {
+#if STACCATO_STATISTICS
+		unsigned long r =
+			staccato::internal::statistics::get_counters().delay;
+		return r;
+#endif
+		return 0;
 	}
 
 	~staccato_scheduler() {

@@ -9,6 +9,8 @@
 #include <fstream>
 #include <cmath>
 
+#include "Counter.hpp"
+
 using namespace std;
 
 class abstract_test
@@ -27,38 +29,41 @@ public:
 	static ofstream *out;
 
 	void run() {
-		vector<sample_t> samples;
+		record_t r = {};
 
 		for (size_t i = 0; i < iterations; i++) {
-			sample_t s;
-
 			set_up();
 
 			auto start = std::chrono::steady_clock::now();
 			iteration();
 			auto end = std::chrono::steady_clock::now();
 
-			s.time = static_cast <double>
+			r.time += static_cast <double>
 				(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1e6;
 
-			s.pass = check();
+			r.nfailed += !check();
+
+			r.steals += get_steals();
+			r.delay += get_delay();
 
 			break_down();
-
-			samples.push_back(s);
 		}
 
-		record_t r = calc_record(samples);
 		appendConsole(r);
 		if (out != nullptr)
 			appendFile(r);
 	}
 
-
 protected:
 	virtual void set_up() = 0;
 	virtual void iteration() = 0;
 	virtual void break_down() = 0;
+	virtual unsigned long get_steals() {
+		return 0;
+	}
+	virtual double get_delay() {
+		return 0;
+	}
 	virtual bool check() {
 		return true;
 	}
@@ -66,38 +71,14 @@ protected:
 private:
 	string name;
 
-	struct sample_t
-	{
-		double time;
-		bool pass;
-	};
-
 	struct record_t
 	{
 		size_t n;
-		double mean;
-		double mean_sq;
-		double std_dev;
 		size_t nfailed;
+		Counter time;
+		Counter steals;
+		Counter delay;
 	};
-
-	record_t calc_record(const vector<sample_t> &samples) {
-		record_t r = record_t();
-		r.n = samples.size();
-
-		for (const auto &s : samples) {
-			r.mean += s.time / r.n;
-			r.mean_sq += (s.time * s.time) / (r.n - 1);
-
-			if (!s.pass)
-				r.nfailed++;
-		}
-
-		double k = static_cast<double> (r.n) / (r.n - 1);
-		r.std_dev = sqrt(r.mean_sq - k * r.mean * r.mean);
-
-		return r;
-	}
 
 	static void print_headers() {
 		static bool is_printed = false;
@@ -110,40 +91,34 @@ private:
 	}
 
 	static void console_header() {
-		cout << setw(30) << "Name" << " | ";
-		cout << setw(4) << "Iter" << " | ";
-		cout << setw(13) << "Mean (sec)" << " | ";
-		cout << setw(13) << "Std Dev" << " | ";
-		cout << setw(13) << "Failed" << " | ";
-		cout << "\n";
+		printf("N:%ld \n\n", iterations);
 
-		cout.setf(ios::fixed, ios::floatfield);
+		printf("%20s | ", "Name");
+		printf("%16s | ", "Time");
+		printf("%16s | ", "Steals");
+		printf("%16s | ", "Delay");
+		printf("%5s | ", "Failed");
+		printf("\n");
 	}
 
-	void appendConsole(const record_t &record) {
-
-		cout << setw(30) << name << " | ";
-		cout << setw(4) << record.n << " | ";
-		cout.precision(6);
-		cout << setw(13) << record.mean << " | ";
-		cout << setw(13) << record.std_dev << " | ";
-		double p = 100.0f * record.nfailed / record.n;
-		if (record.nfailed > 0) {
-			cout << setw(13 - 7) << record.nfailed;
-			cout.precision(0);
-			cout << " (" << setw(3) << p << "%)" << " | ";
-		} else {
-			cout << setw(13) << record.nfailed << " | ";
-		}
-		cout << endl;
+	void appendConsole(const record_t &r) {
+		printf("%20s | ", name.c_str());
+		printf("%9.5f %5.1f%% | " , r.time.mean()   , r.time.pm(1));
+		printf("%9.5f %5.1f%% | " , r.steals.mean() , r.steals.pm(1));
+		printf("%9.5f %5.1f%% | " , r.delay.mean()  , r.delay.pm(1));
+		printf("%5lu | ", r.nfailed);
+		printf("\n");
 	}
 
 	void appendFile(const record_t &record) {
 		*out << "\"" << name << "\"\t";
 		*out << record.n << "\t";
-		*out << record.mean << "\t";
-		*out << record.std_dev << "\t";
-		*out << record.nfailed << "\t";
+		*out << record.time.mean() << "\t";
+		*out << record.time.var() << "\t";
+		*out << record.steals.mean() << "\t";
+		*out << record.steals.var() << "\t";
+		*out << record.delay.mean() << "\t";
+		*out << record.delay.var() << "\t";
 		*out << endl;
 	}
 };

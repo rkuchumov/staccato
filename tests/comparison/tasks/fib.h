@@ -51,10 +51,10 @@ template<typename scheduler, typename task, bool no_del = false>
 class fib_test: public abstract_test
 {
 public:
-	fib_test(string name_, int n_ = 35, size_t nthreads = 0) 
+	fib_test(string name_, int n_ = 35, size_t nthreads = 0, size_t k = 0) 
 		: abstract_test(name_), n(n_)
 	{
-		sh = new scheduler(nthreads);
+		sh = new scheduler(nthreads, k);
 	}
 
 	~fib_test() {
@@ -77,6 +77,14 @@ public:
 		ans = 0;
 		if (!no_del)
 			delete root;
+	}
+
+	unsigned long get_steals() {
+		return sh->get_steals();
+	}
+
+	double get_delay() {
+		return sh->get_delay();
 	}
 
 private:

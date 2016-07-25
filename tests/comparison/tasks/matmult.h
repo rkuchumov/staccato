@@ -105,7 +105,7 @@ class matmul_test: public abstract_test
 public:
 	typedef long T;
 
-	matmul_test(string name_, size_t log_size = 8, size_t nthreads = 0) 
+	matmul_test(string name_, size_t log_size = 8, size_t nthreads = 0, size_t k = 0) 
 		: abstract_test(name_)
 	{
 		size = 1 << log_size;
@@ -117,11 +117,19 @@ public:
 
 		C = matmul_task<task, T, no_del>::allocate_matrix(size);
 
-		sh = new scheduler(nthreads);
+		sh = new scheduler(nthreads, k);
 	}
 
 	~matmul_test() {
 		delete sh;
+	}
+
+	unsigned long get_steals() {
+		return sh->get_steals();
+	}
+
+	double get_delay() {
+		return sh->get_delay();
 	}
 
 	void set_up() {

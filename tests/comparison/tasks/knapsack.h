@@ -115,7 +115,7 @@ template<typename scheduler, typename task, bool no_del = false>
 class knacksack_test: public abstract_test
 {
 public:
-	knacksack_test(string name_, unsigned N = 24, size_t nthreads = 0) 
+	knacksack_test(string name_, unsigned N = 24, size_t nthreads = 0, size_t k = 0) 
 		: abstract_test(name_)
 	{
 		knapsack_task<task, no_del>::N = N;
@@ -129,11 +129,19 @@ public:
 			knapsack_task<task, no_del>::w[i] = my_rand() % 600;
 		}
 
-		sh = new scheduler(nthreads);
+		sh = new scheduler(nthreads, k);
 	}
 
 	~knacksack_test() {
 		delete sh;
+	}
+
+	unsigned long get_steals() {
+		return sh->get_steals();
+	}
+
+	double get_delay() {
+		return sh->get_delay();
 	}
 
 	void set_up() {

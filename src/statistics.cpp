@@ -30,7 +30,7 @@ unsigned long statistics::stat_thread_iteratinons;
 void statistics::initialize()
 {
 	size_t nthreads = scheduler::workers_count + 1;
-	counters = new counter[nthreads];
+	counters = new counter[nthreads]();
 	me = 0;
 
 #if STACCATO_SAMPLE_DEQUES_SIZES
@@ -109,6 +109,8 @@ void statistics::terminate()
 	stat_thread->join();
 #endif // STACCATO_SAMPLE_DEQUES_SIZES
 
+	total = {};
+
 	for (size_t i = 0; i < scheduler::workers_count + 1; i++) {
 		total.put                   += counters[i].put;
 		total.take                  += counters[i].take;
@@ -121,7 +123,7 @@ void statistics::terminate()
 	}
 
 	dump_to_console();
-	dump_counters_to_file();
+	// dump_counters_to_file();
 }
 
 const char *statistics::event_to_str(unsigned e)
@@ -234,7 +236,7 @@ void statistics::dump_to_console()
 
 void statistics::dump_counters_to_file()
 {
-	FILE *fp = fopen("scheduler_counters.tab", "w");
+	FILE *fp = fopen("scheduler_counters.tab", "wa");
 
 	size_t nthreads = scheduler::workers_count + 1;
 
@@ -295,6 +297,22 @@ void statistics::count(event e)
 		default:
 			ASSERT(false, "Undefined event: " << e);
 	}
+}
+
+statistics::counter statistics::get_counters()
+{
+	counter r = {};
+	for (size_t i = 0; i < scheduler::workers_count + 1; i++) {
+		r.put                   += counters[i].put;
+		r.take                  += counters[i].take;
+		r.take_failed           += counters[i].take_failed;
+		r.single_steal          += counters[i].single_steal;
+		r.single_steal_failed   += counters[i].single_steal_failed;
+		r.multiple_steal        += counters[i].multiple_steal;
+		r.multiple_steal_failed += counters[i].multiple_steal_failed;
+		r.resize                += counters[i].resize;
+	}
+	return r;
 }
 
 } // namespace internal

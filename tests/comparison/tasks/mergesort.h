@@ -62,7 +62,7 @@ template<typename scheduler, typename task, bool no_del = false>
 class mergesort_test: public abstract_test
 {
 public:
-	mergesort_test(string name_, int log_size = 24, bool is_exp_ = false, size_t nthreads = 0) 
+	mergesort_test(string name_, int log_size = 24, bool is_exp_ = false, size_t nthreads = 0, size_t k = 0) 
 		: abstract_test(name_), is_exp(is_exp_)
 	{
 		size = 1 << log_size;
@@ -70,7 +70,7 @@ public:
 		array = new elem_t[size];
 		tmp = new elem_t[size];
 
-		sh = new scheduler(nthreads);
+		sh = new scheduler(nthreads, k);
 	}
 
 	~mergesort_test() {
@@ -78,6 +78,14 @@ public:
 
 		delete[] array;
 		delete[] tmp;
+	}
+
+	unsigned long get_steals() {
+		return sh->get_steals();
+	}
+
+	double get_delay() {
+		return sh->get_delay();
 	}
 
 	void set_up() {

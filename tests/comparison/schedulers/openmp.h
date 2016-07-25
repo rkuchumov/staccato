@@ -41,7 +41,7 @@ private:
 	size_t nthreads;
 
 public:
-	openmp_sheduler(size_t nthreads_ = 0):
+	openmp_sheduler(size_t nthreads_ = 0, size_t = 0):
 		nthreads(nthreads_) 
 	{ }
 

@@ -42,7 +42,7 @@ public:
 class TbbScheduler: public abstact_sheduler<TbbTask>
 {
 public:
-	TbbScheduler(size_t nthreads = 0) {
+	TbbScheduler(size_t nthreads = 0, size_t = 0) {
 		if (nthreads)
 			scheduler_init = new tbb::task_scheduler_init(nthreads);
 		else
@@ -50,6 +50,7 @@ public:
 	}
 
 	~TbbScheduler() {
+		scheduler_init->terminate();
 		delete scheduler_init;
 	}
 
