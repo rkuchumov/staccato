@@ -4,19 +4,13 @@
 namespace staccato
 {
 
-std::atomic_bool scheduler::is_active(false);
-std::thread **scheduler::workers;
-size_t scheduler::workers_count = 0;
+std::atomic_bool scheduler::m_is_active(false);
+internal::worker **scheduler::workers;
+size_t scheduler::workers_count;
 
-internal::task_deque *scheduler::pool;
-thread_local internal::task_deque* scheduler::my_pool;
-
-size_t scheduler::deque_log_size = 6;
-size_t scheduler::tasks_per_steal = 1;
-
-#if STACCATO_DEBUG
-thread_local size_t scheduler::my_id = 0;
-#endif // STACCATO_DEBUG
+// #if STACCATO_DEBUG
+// thread_local size_t scheduler::my_id = 0;
+// #endif // STACCATO_DEBUG
 
 scheduler::scheduler()
 { }
@@ -24,147 +18,81 @@ scheduler::scheduler()
 scheduler::~scheduler()
 { }
 
-void scheduler::initialize(size_t nthreads)
+void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 {
-	ASSERT(is_active == false, "Schdeler is already initialized");
+	ASSERT(m_is_active == false, "Schdeler is already initialized");
 
 	if (nthreads == 0)
 		nthreads = std::thread::hardware_concurrency();
+	workers_count = nthreads;
 
-	internal::task_deque::deque_log_size = deque_log_size;
-	internal::task_deque::tasks_per_steal = tasks_per_steal;
-	pool = new internal::task_deque[nthreads];
-	my_pool = pool;
+	workers = new internal::worker *[workers_count];
+	for (size_t i = 0; i < workers_count; ++i)
+		workers[i] = new internal::worker(deque_log_size);
 
-	workers_count = nthreads - 1;
+	for (size_t i = 1; i < workers_count; ++i)
+		workers[i]->fork();
 
-#if STACCATO_DEBUG
-	my_id = 0;
-	std::cerr << "Scheduler is working in debug mode\n";
-#endif // STACCATO_DEBUG
+	m_is_active = true;
 
-#if STACCATO_STATISTICS
-	internal::statistics::initialize();
-#endif // STACCATO_STATISTICS
+}
 
-	is_active = true;
-
-	if (workers_count != 0) {
-		workers = new std::thread *[workers_count];
-
-		for (size_t i = 0; i < workers_count; i++)
-			workers[i] = new std::thread(initialize_worker, i + 1);
-	}
+bool scheduler::is_active()
+{ return m_is_active;
 }
 
 void scheduler::terminate()
 {
-	ASSERT(is_active, "Task schedulter is not initializaed yet");
+	ASSERT(m_is_active, "Task schedulter is not initializaed yet");
 
-	is_active = false;
+	m_is_active = false;
 
-#if STACCATO_STATISTICS
-	internal::statistics::terminate();
-#endif // STACCATO_STATISTICS
+// #if STACCATO_STATISTICS
+// 	internal::statistics::terminate();
+// #endif // STACCATO_STATISTICS
 
-	for (size_t i = 0; i < workers_count; i++) {
+	for (size_t i = 1; i < workers_count; ++i)
 		workers[i]->join();
+
+	for (size_t i = 0; i < workers_count; ++i)
 		delete workers[i];
-	}
+
 	delete []workers;
 
-	delete []pool;
 }
 
-void scheduler::initialize_worker(size_t id)
+void scheduler::spawn_and_wait(task *t)
 {
-	ASSERT(id > 0, "Worker #0 is master");
+	ASSERT(workers != nullptr, "Task Pool is not initialized");
+	ASSERT(workers[0] != nullptr, "Task Pool is not initialized");
 
-#if STACCATO_STATISTICS
-	internal::statistics::set_worker_id(id);
-#endif // STACCATO_STATISTICS
+	// TODO: name this worker
+	// workers[0]->enqueue(t);
+	//
+	ASSERT(t->parent == nullptr, "parent of a root should be null");
 
-#if STACCATO_DEBUG
-	my_id = id;
-#endif // STACCATO_DEBUG
-
-	my_pool = &pool[id];
-
-	task_loop(nullptr);
+	workers[0]->task_loop(t, t);
+	// workers[0]->task_loop();
 }
 
-void scheduler::task_loop(task *parent)
-{
-	ASSERT(parent != nullptr || (parent == nullptr && my_pool != pool),
-			"Root task must be executed only on master");
-
-	task *t = nullptr;
-
-	while (true) {
-		while (true) { // Local tasks loop
-			if (t) {
-#if STACCATO_DEBUG
-				ASSERT(t->get_state() == task::taken || t->get_state() == task::stolen,
-					"Incorrect task state: " << t->get_state_str());
-				t->set_state(task::executing);
-#endif // STACCATO_DEBUG
-
-				t->execute();
-
-#if STACCATO_DEBUG
-				ASSERT(t->get_state() == task::executing,
-					"Incorrect task state: " << t->get_state_str());
-				t->set_state(task::finished);
-
-				ASSERT(t->subtask_count == 0,
-						"Task still has subtaks after it has been executed");
-#endif // STACCATO_DEBUG
-
-				if (t->parent != nullptr)
-					dec_relaxed(t->parent->subtask_count);
-
-				delete t;
-			}
-
-			if (parent != nullptr && load_relaxed(parent->subtask_count) == 0)
-				return;
-
-			t = my_pool->take();
-
-			if (!t)
-				break;
-		} 
-
-		if (parent == nullptr && !load_relaxed(is_active))
-			return;
-
-		t = steal_task();
-	} 
-
-	ASSERT(false, "Must never get there");
-}
-
-void scheduler::spawn(task *t)
-{
-	ASSERT(my_pool != nullptr, "Task Pool is not initialized");
-
-	my_pool->put(t);
-}
-
-task *scheduler::steal_task()
+internal::worker *scheduler::get_victim(internal::worker *thief)
 {
 	ASSERT(workers_count != 0, "Stealing when scheduler has a single worker");
 
-	size_t n = workers_count + 1; // +1 for master
-	size_t victim_id = internal::xorshift_rand() % n;
-	internal::task_deque *victim_pool = &pool[victim_id];
-	if (victim_pool == my_pool)
-		victim_pool = &pool[(victim_id + 1) % n];
+	size_t n = workers_count;
+	size_t i = internal::xorshift_rand() % n;
+	auto victim = workers[i];
+	if (victim == thief) {
+		i++;
+		i %= n;
+		victim = workers[i];
+	}
 
-	ASSERT(victim_pool != nullptr, "Stealing from NULL deque");
-	ASSERT(victim_pool != my_pool, "Stealing from my own deque");
+	// std::cerr << n << " stealing " << workers[0] << " " << workers[1] << std::endl;
 
-	return victim_pool->steal(my_pool);
+	// ASSERT(victim_pool != nullptr, "Stealing from NULL deque");
+	// ASSERT(victim_pool != my_pool, "Stealing from my own deque");
+	return victim;
 }
 
 } // namespace stacccato

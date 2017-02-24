@@ -12,7 +12,7 @@
 #	define COUNT(event) do {} while (false);
 #endif // STACCATO_STATISTICS
 
-#if STACCATO_DEBUG
+// #if STACCATO_DEBUG
 #   define ASSERT(condition, message) \
     do { \
         if (!(condition)) { \
@@ -21,9 +21,9 @@
             std::exit(EXIT_FAILURE); \
         } \
     } while (false)
-#else
-#   define ASSERT(condition, message) do { } while (false)
-#endif
+// #else
+// #   define ASSERT(condition, message) do { } while (false)
+// #endif
 
 #define load_relaxed(var) (var).load(std::memory_order_relaxed)
 #define load_acquire(var) (var).load(std::memory_order_acquire)

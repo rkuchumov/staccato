@@ -2,23 +2,26 @@ SHELL = /bin/sh
 
 CC = g++
 CFLAGS = -O0 -g
-ALL_FLAGS = -std=c++11 -pthread
+ALL_FLAGS = -std=c++11 -pthread -mcx16
 
 BUILD_PATH = ../build
 
-ifeq ($(cfg), debug)
+# ifeq ($(cfg), debug)
+	# MODE = debug
+# 	SO_PATH = $(BUILD_PATH)/debug
+# 	CFLAGS += -Wall -Wextra -Wshadow -Wcast-align -pedantic
+# 	VARS += -DSTACCATO_DEBUG=1 -DSTACCATO_STATISTICS=1
+# else ifeq ($(cfg), statistics)
+# 	MODE = statistics
+# 	SO_PATH = $(BUILD_PATH)/statistics
+# 	VARS += -DSTACCATO_STATISTICS=1 -DSTACCATO_SAMPLE_DEQUES_SIZES=0
+# else
 	MODE = debug
 	SO_PATH = $(BUILD_PATH)/debug
+	SO_PATH = /home/rk/Development/staccato/build/debug/
+	CFLAGS = -O0 -g
 	CFLAGS += -Wall -Wextra -Wshadow -Wcast-align -pedantic
-	VARS += -DSTACCATO_DEBUG=1 -DSTACCATO_STATISTICS=1
-else ifeq ($(cfg), statistics)
-	MODE = statistics
-	SO_PATH = $(BUILD_PATH)/statistics
-	VARS += -DSTACCATO_STATISTICS=1 -DSTACCATO_SAMPLE_DEQUES_SIZES=0
-else
-	MODE = release
-	SO_PATH = $(BUILD_PATH)/release
-endif
+# endif
 
 LIBS = -I../include/ -L$(SO_PATH) -Wl,-rpath=$(SO_PATH) -lstaccato
 

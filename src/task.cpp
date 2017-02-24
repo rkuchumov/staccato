@@ -5,47 +5,60 @@
 namespace staccato
 {
 
-task::task():
-	parent(nullptr),
-	subtask_count(0)
+task::task()
+: parent(nullptr)
+, executer(nullptr)
+, subtask_count(0)
 #if STACCATO_DEBUG
-	, state(initializing)
+, state(initializing)
 #endif // STACCATO_DEBUG
-{ }
+{
+	// std::cout << "!!!" << parent << std::endl;
+}
 
 task::~task()
-{
-}
+{ }
 
 void task::spawn(task *t)
 {
-	ASSERT(t->subtask_count == 0,
-		"Spawned task is not allowed to have subtasks");
-	ASSERT(parent == nullptr || (parent != nullptr && state == executing),
-		"Incorrect current task state: " << t->get_state_str());
-	ASSERT(t->state == initializing,
-		"Incorrect newtask state: " << t->get_state_str());
+	// ASSERT(t->subtask_count == 0,
+	// 	"Spawned task is not allowed to have subtasks");
+	// ASSERT(parent == nullptr || (parent != nullptr && state == executing),
+	// 	"Incorrect current task state: " << t->get_state_str());
+	// ASSERT(t->state == initializing,
+	// 	"Incorrect newtask state: " << t->get_state_str());
 
 #if STACCATO_DEBUG
 	t->state = spawning;
 #endif // STACCATO_DEBUG
+	// std::cerr << "t: : " << this << std::endl;
 
 	t->parent = this;
 
 	inc_relaxed(subtask_count);
 
-	scheduler::spawn(t);
+	executer->enqueue(t);
 }
 
 void task::wait_for_all()
 {
-	ASSERT(parent == nullptr || (parent != nullptr && state == executing),
-		"Incorrect current task state: " << get_state_str());
+	// ASSERT(parent == nullptr || (parent != nullptr && state == executing),
+		// "Incorrect current task state: " << get_state_str());
 
-	scheduler::task_loop(/*parent=*/this);
+	ASSERT(executer != nullptr, "Executed by nullptr");
+
+	// TODO: wrap this function, it should be private
+	executer->task_loop(this);
+
+	// scheduler::task_loop(#<{(|parent=|)}>#this);
 
 	ASSERT(subtask_count == 0,
 		"Task still has subtaks after task_loop()");
+}
+
+void task::set_executer(internal::worker *worker)
+{
+	executer = worker;
 }
 
 #if STACCATO_DEBUG

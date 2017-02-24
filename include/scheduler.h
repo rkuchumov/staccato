@@ -7,7 +7,8 @@
 #include "constants.h"
 #include "task.h"
 #include "deque.h"
-#include "statistics.h"
+// #include "statistics.h"
+#include "worker.h"
 
 namespace staccato
 {
@@ -15,35 +16,28 @@ namespace staccato
 class scheduler
 {
 public:
-	static void initialize(size_t nthreads = 0);
+	static void initialize(size_t nthreads = 0, size_t deque_log_size = 7);
 	static void terminate();
 
-	static size_t deque_log_size;
-	static size_t tasks_per_steal;
+	static void spawn_and_wait(task *t);
+	// static void sync();
 
-private:
+	task *root;
+
+// private:
 	friend class task;
-	friend class internal::statistics;
+	friend class internal::worker;
 
 	scheduler();
 	~scheduler();
 
-	static void initialize_worker(size_t id);
-	static std::thread **workers;
-
-	static void spawn(task *t);
-	static void task_loop(task *parent);
-
-	static STACCATO_TLS internal::task_deque* my_pool;
-
-	static std::atomic_bool is_active;
-	static internal::task_deque *pool;
-	static task *steal_task();
 	static size_t workers_count;
+	static internal::worker **workers;
 
-#if STACCATO_DEBUG
-	static STACCATO_TLS size_t my_id;
-#endif
+	static internal::worker *get_victim(internal::worker *thief);
+	static std::atomic_bool m_is_active;
+	static bool is_active();
+
 };
 
 } /* namespace:staccato */ 

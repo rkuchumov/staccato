@@ -2,31 +2,22 @@
 
 #include "utils.h"
 #include "deque.h"
-#include "statistics.h"
+// #include "statistics.h"
 
 namespace staccato
 {
 namespace internal
 {
 
-// TODO: remove it, use scheduler::log_szie;
-size_t task_deque::deque_log_size = 6;
-size_t task_deque::tasks_per_steal = 1;
-
-task_deque::task_deque()
+task_deque::task_deque(size_t log_size)
 {
-	ASSERT(deque_log_size > 0 && deque_log_size < 32, "Incorrect deque size.");
-	ASSERT(tasks_per_steal > 0, "Incorrect number of tasks per steal.");
+	ASSERT(log_size > 0 && log_size < 32, "Incorrect deque size.");
 
-	stamped_size_t tt;
-	tt.stamp = 0;
-	tt.value = 1;
-
-	top = tt;
+	top = 1;
 	bottom = 1;
 
 	array_t *a = new array_t;
-	a->size_mask = (1 << deque_log_size) - 1;
+	a->size_mask = (1 << log_size) - 1;
 	a->buffer = new atomic_task[a->size_mask + 1];
 
 	store_relaxed(array, a);
@@ -35,7 +26,9 @@ task_deque::task_deque()
 void task_deque::put(task *new_task)
 {
 	size_t b = load_relaxed(bottom);
-	size_t t = load_acquire(top).value;
+	size_t t = load_acquire(top);
+
+	std::cout << "put: " << b << " " << t << std::endl;
 
 	array_t *a = load_relaxed(array);
 
@@ -49,9 +42,9 @@ void task_deque::put(task *new_task)
 	atomic_fence_release();
 
 #if STACCATO_DEBUG
-	ASSERT(new_task->get_state() == task::spawning,
-		"Incorrect task state: " << new_task->get_state_str());
-	new_task->set_state(task::ready);
+	// ASSERT(new_task->get_state() == task::spawning,
+	// 	"Incorrect task state: " << new_task->get_state_str());
+	// new_task->set_state(task::ready);
 #endif // STACCATO_DEBUG
 
 	store_relaxed(bottom, b + 1);
@@ -59,131 +52,82 @@ void task_deque::put(task *new_task)
 	COUNT(put);
 }
 
-size_t task_deque::load_from(array_t *other, size_t other_top, size_t size)
-{
-	size_t b = load_relaxed(bottom);
-	size_t t = load_acquire(top).value;
-
-	array_t *a = load_relaxed(array);
-
-	if (b - t + size > a->size_mask) {
-		resize();
-		a = load_relaxed(array);
-	}
-
-	for (size_t i = 0; i < size; i++) {
-		task *tt = load_relaxed(other->buffer[(other_top + i) & other->size_mask]);
-		store_relaxed(a->buffer[(b + i) & a->size_mask], tt);
-	}
-
-	atomic_fence_release();
-
-	return b;
-}
-
 task *task_deque::take()
 {
 	size_t b = dec_relaxed(bottom) - 1;
 	array_t *a = load_relaxed(array);
 	atomic_fence_seq_cst();
-	stamped_size_t t = load_relaxed(top);
+	size_t t = load_relaxed(top);
+
+	std::cout << "take: " << b + 1 << " " << t << std::endl;
 
 	// Deque was empty, restoring to empty state
-	if (t.value > b) {
+	if (t > b) {
 		store_relaxed(bottom, b + 1);
 		return nullptr;
 	}
 
 	task *r = load_relaxed(a->buffer[b & a->size_mask]);
 
-	if (t.value + (tasks_per_steal - 1) >= b) {
-		// Deque had less or equal number of tasks than steal amount
-		
-		stamped_size_t tt;
-		tt.value = t.value;
-		tt.stamp = t.stamp + 1;
-
+	if (t == b) {
+		// std::cout << "one task in deque" << std::endl;
 		// Check if they are not stollen
-		if (!cas_strong(top, t, tt)) {
+		if (!cas_strong(top, t, t + 1)) {
 			bottom = b + 1;
 			COUNT(take_failed);
 			return nullptr;
 		}
+
+		bottom = b + 1;
 	}
 
 #if STACCATO_DEBUG
-	ASSERT(r != nullptr, "Taken NULL task from non-empty deque");
-	ASSERT(r->get_state() == task::ready,
-			"Incorrect task state: " << r->get_state_str());
-	r->set_state(task::taken);
+	// ASSERT(r != nullptr, "Taken NULL task from non-empty deque");
+	// ASSERT(r->get_state() == task::ready,
+	// 		"Incorrect task state: " << r->get_state_str());
+	// r->set_state(task::taken);
 #endif // STACCATO_DEBUG
 
 	COUNT(take);
 	return r;
 }
 
-task *task_deque::steal(task_deque *thief)
+task *task_deque::steal()
 {
-	ASSERT(this != thief, "Stealing from own deque");
+	// std::cout << "steal() is called" << std::endl;
+	// ASSERT(this != thief, "Stealing from own deque");
 
-	stamped_size_t t = load_acquire(top);
+	size_t t = load_acquire(top);
 	atomic_fence_seq_cst();
 	size_t b = load_acquire(bottom);
 
-	if (t.value >= b) // Deque is empty
+	if (t >= b) { 
+		std::cerr << "was empty\n";
 		return nullptr;
+	}// Deque is empty
 
 	array_t *a = load_consume(array);
 
-	task *r = load_relaxed(a->buffer[t.value & a->size_mask]);
+	task *r = load_relaxed(a->buffer[t & a->size_mask]);
 
-	if (tasks_per_steal == 1 || b - t.value < tasks_per_steal) {
-		// Victim doesn't have required amount of tasks
-		stamped_size_t tt;
-		tt.value = t.value + 1;
-		tt.stamp = t.stamp + 1;
+	// Victim doesn't have required amount of tasks
 
-		if (!cas_weak(top, t, tt)) {
-			COUNT(single_steal_failed);
-			return nullptr;
-		}
-
-#if STACCATO_DEBUG
-		ASSERT(r != nullptr, "Stolen NULL task");
-		ASSERT(r->get_state() == task::ready,
-				"Incorrect task state: " << r->get_state_str());
-		r->set_state(task::stolen);
-#endif // STACCATO_DEBUG
-
-		COUNT(single_steal);
-		return r;
+	if (!cas_weak(top, t, t + 1)) {
+		COUNT(single_steal_failed);
+		std::cerr << "steal failed\n";
+		return nullptr;
 	}
 
-	// Moving tasks to thief deque without updating its bottom index (in case of failed steal)
-	size_t thief_b = thief->load_from(a, t.value + 1, tasks_per_steal - 1);
-
-	// Moved tasks could be stolen or one task could be taken by owner
-	stamped_size_t tt;
-	tt.value = t.value + tasks_per_steal;
-	tt.stamp = t.stamp + 1;
-	if (!cas_weak(top, t, tt)) {
-		COUNT(multiple_steal_failed);
-		return nullptr; 
-	}
-
-	ASSERT(thief->bottom == thief_b, "Thief bottom index has changed");
-
-	// Steal was successfull, updating thief bottom
-	store_relaxed(thief->bottom, thief_b + tasks_per_steal - 1);
+	std::cerr << "steal success\n";
 
 #if STACCATO_DEBUG
-	ASSERT(r != nullptr, "Stolen NULL task");
-	ASSERT(r->get_state() == task::ready,
-		"Incorrect task state: " << r->get_state_str());
-	r->set_state(task::stolen);
+	// ASSERT(r != nullptr, "Stolen NULL task");
+	// ASSERT(r->get_state() == task::ready,
+	// 		"Incorrect task state: " << r->get_state_str());
+	// r->set_state(task::stolen);
 #endif // STACCATO_DEBUG
 
-	COUNT(multiple_steal);
+	COUNT(single_steal);
 	return r;
 }
 
@@ -195,7 +139,7 @@ void task_deque::resize()
 	a->size_mask = (old->size_mask << 1) | 1;
 	a->buffer = new atomic_task[a->size_mask + 1];
 
-	size_t t = load_relaxed(top).value;
+	size_t t = load_relaxed(top);
 	size_t b = load_relaxed(bottom);
 	for (size_t i = t; i < b; i++) {
 		task *item = load_relaxed(old->buffer[i & old->size_mask]);
