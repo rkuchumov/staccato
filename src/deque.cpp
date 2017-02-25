@@ -23,12 +23,20 @@ task_deque::task_deque(size_t log_size)
 	store_relaxed(array, a);
 }
 
+task_deque::~task_deque()
+{
+	array_t *a = load_relaxed(array);
+
+	delete []a->buffer;
+	delete a;
+}
+
 void task_deque::put(task *new_task)
 {
 	size_t b = load_relaxed(bottom);
 	size_t t = load_acquire(top);
 
-	std::cout << "put: " << b << " " << t << std::endl;
+	// std::cout << "put: " << b << " " << t << std::endl;
 
 	array_t *a = load_relaxed(array);
 
@@ -59,7 +67,7 @@ task *task_deque::take()
 	atomic_fence_seq_cst();
 	size_t t = load_relaxed(top);
 
-	std::cout << "take: " << b + 1 << " " << t << std::endl;
+	// std::cout << "take: " << b + 1 << " " << t << std::endl;
 
 	// Deque was empty, restoring to empty state
 	if (t > b) {
@@ -102,7 +110,7 @@ task *task_deque::steal()
 	size_t b = load_acquire(bottom);
 
 	if (t >= b) { 
-		std::cerr << "was empty\n";
+		// std::cerr << "was empty\n";
 		return nullptr;
 	}// Deque is empty
 
@@ -114,11 +122,11 @@ task *task_deque::steal()
 
 	if (!cas_weak(top, t, t + 1)) {
 		COUNT(single_steal_failed);
-		std::cerr << "steal failed\n";
+		// std::cerr << "steal failed\n";
 		return nullptr;
 	}
 
-	std::cerr << "steal success\n";
+	// std::cerr << "steal success\n";
 
 #if STACCATO_DEBUG
 	// ASSERT(r != nullptr, "Stolen NULL task");

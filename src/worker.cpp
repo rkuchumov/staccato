@@ -13,13 +13,16 @@ namespace internal
 
 worker::worker(size_t deque_log_size)
 : pool(deque_log_size)
+, handle(nullptr)
 {
 
 }
 
 worker::~worker()
 {
-
+	if (handle) {
+		delete handle;
+	}
 }
 
 void worker::fork()
@@ -30,13 +33,16 @@ void worker::fork()
 
 void worker::join()
 {
-
+	ASSERT(handle, "Thread is not created");
+	handle->join();
 }
 
 void worker::task_loop(task *waiting, task *t)
 {
 	// ASSERT(parent != nullptr || (parent == nullptr && my_pool != pool),
 	// 		"Root task must be executed only on master");
+
+	scheduler::wait_workers_fork();
 
 	while (true) {
 		while (true) { // Local tasks loop
@@ -61,41 +67,28 @@ void worker::task_loop(task *waiting, task *t)
 // 						"Task still has subtaks after it has been executed");
 // #endif // STACCATO_DEBUG
 
-				// if (t->parent != nullptr)
-					// dec_relaxed(t->parent->subtask_count);
-
 				if (t->parent != nullptr)
 					dec_relaxed(t->parent->subtask_count);
 			}
 
 			if (waiting != nullptr && load_relaxed(waiting->subtask_count) == 0)
 				return;
-			// if (waiting != nullptr && load_relaxed(waiting->subtask_count) == 0)
-			// 	return;
 
 			t = pool.take();
 
-			if (!t){
-
-				std::cerr << "atat" << "\n";
+			if (!t) {
 				break;
 			}
 		} 
 
+		if (waiting == nullptr && !scheduler::is_active())
+			return;
 		// std::cerr << std::this_thread::get_id() << "\n";
-		// std::cerr << scheduler::is_active() << "\n";
-
-		// if (waiting == nullptr && !scheduler::is_active())
-			// return;
 
 		auto victim = scheduler::get_victim(this);
 
 		t = victim->pool.steal();
-
-		if (t)
-			std::cout << t << "stolen" << std::endl;
-
-		// sleep(3);
+		// std::cerr << std::this_thread::get_id() << " " << t << "\n";
 	} 
 
 	ASSERT(false, "Must never get there");

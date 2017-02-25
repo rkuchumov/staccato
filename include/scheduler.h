@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <thread>
+#include <condition_variable>
 
 #include "constants.h"
 #include "task.h"
@@ -37,6 +38,8 @@ public:
 	static internal::worker *get_victim(internal::worker *thief);
 	static std::atomic_bool m_is_active;
 	static bool is_active();
+
+	static void wait_workers_fork();
 
 };
 

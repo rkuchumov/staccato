@@ -38,12 +38,21 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 }
 
 bool scheduler::is_active()
-{ return m_is_active;
+{
+	return load_relaxed(m_is_active);
+}
+
+void scheduler::wait_workers_fork()
+{
+	while (!load_consume(m_is_active)) {
+		std::this_thread::yield();
+	}
 }
 
 void scheduler::terminate()
 {
 	ASSERT(m_is_active, "Task schedulter is not initializaed yet");
+	std::cerr << "terminating\n";
 
 	m_is_active = false;
 

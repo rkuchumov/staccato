@@ -13,6 +13,7 @@ class task_deque
 {
 public:
 	task_deque(size_t log_size);
+	~task_deque();
 
 	void put(task *t);
 	task *take();

@@ -11,11 +11,11 @@ class FibTask: public task
 public:
 	FibTask (int n_, long *sum_): n(n_), sum(sum_)
 	{
-		cerr << "ctor: " << n << "\n";
+		// cerr << "ctor: " << n << "\n";
 	}
 
 	void execute() {
-		cerr << "exec: " << n << "\n";
+		// cerr << "exec: " << n << "\n";
 		if (n <= 2) {
 			*sum = 1;
 			return;
@@ -30,8 +30,8 @@ public:
 
 		wait_for_all();
 
-		// delete a;
-		// delete b;
+		delete a;
+		delete b;
 
 		*sum = x + y;
 
@@ -56,7 +56,7 @@ int fib(int n)
 
 int main()
 {
-	unsigned n = 20;
+	unsigned n = 39;
 	long answer;
 
 	scheduler::initialize(4);
