@@ -4,12 +4,14 @@
 #include <cstdlib>
 #include <thread>
 
-// #include "task.h"
-#include "deque.h"
+#include "task_deque.h"
 #include "constants.h"
 
 namespace staccato
 {
+
+class task;
+
 namespace internal
 {
 
@@ -22,18 +24,12 @@ public:
 	void fork();
 	void join();
 
-	void enqueue(task *t);
 	void task_loop(task *parent = nullptr, task *t = nullptr);
 
+	task_deque pool;
+
 private:
-	friend class task;
-
-	internal::task_deque pool;
-
-	task *steal_task();
-
 	std::thread *handle;
-
 };
 
 }

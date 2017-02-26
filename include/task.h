@@ -6,7 +6,6 @@
 
 #include "constants.h"
 
-
 namespace staccato
 {
 
@@ -41,15 +40,12 @@ public:
 
 	virtual void execute() = 0;
 
-	// TODO: private!
+private:
+	friend class internal::worker;
+
 	task *parent;
 
-	void set_executer(internal::worker *worker);
-
-// private:
-
 	internal::worker *executer;
-
 
 	std::atomic_size_t subtask_count;
 

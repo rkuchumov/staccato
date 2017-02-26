@@ -1,12 +1,13 @@
 #include "utils.h"
 #include "scheduler.h"
+#include "worker.h"
 
 namespace staccato
 {
 
-std::atomic_bool scheduler::m_is_active(false);
+std::atomic_bool scheduler::is_active(false);
 internal::worker **scheduler::workers;
-size_t scheduler::workers_count;
+size_t scheduler::workers_count(0);
 
 // #if STACCATO_DEBUG
 // thread_local size_t scheduler::my_id = 0;
@@ -20,7 +21,7 @@ scheduler::~scheduler()
 
 void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 {
-	ASSERT(m_is_active == false, "Schdeler is already initialized");
+	ASSERT(is_active == false, "Schdeler is already initialized");
 
 	if (nthreads == 0)
 		nthreads = std::thread::hardware_concurrency();
@@ -33,28 +34,23 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 	for (size_t i = 1; i < workers_count; ++i)
 		workers[i]->fork();
 
-	m_is_active = true;
+	is_active = true;
 
-}
-
-bool scheduler::is_active()
-{
-	return load_relaxed(m_is_active);
 }
 
 void scheduler::wait_workers_fork()
 {
-	while (!load_consume(m_is_active)) {
+	while (!load_consume(is_active)) {
 		std::this_thread::yield();
 	}
 }
 
 void scheduler::terminate()
 {
-	ASSERT(m_is_active, "Task schedulter is not initializaed yet");
+	ASSERT(is_active, "Task schedulter is not initializaed yet");
 	std::cerr << "terminating\n";
 
-	m_is_active = false;
+	is_active = false;
 
 // #if STACCATO_STATISTICS
 // 	internal::statistics::terminate();
@@ -78,7 +74,7 @@ void scheduler::spawn_and_wait(task *t)
 	// TODO: name this worker
 	// workers[0]->enqueue(t);
 	//
-	ASSERT(t->parent == nullptr, "parent of a root should be null");
+	// ASSERT(t->parent == nullptr, "parent of a root should be null");
 
 	workers[0]->task_loop(t, t);
 	// workers[0]->task_loop();

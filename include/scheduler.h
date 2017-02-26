@@ -3,16 +3,19 @@
 
 #include <cstdlib>
 #include <thread>
-#include <condition_variable>
+#include <atomic>
 
 #include "constants.h"
-#include "task.h"
-#include "deque.h"
-// #include "statistics.h"
-#include "worker.h"
 
 namespace staccato
 {
+
+class task;
+
+namespace internal
+{
+class worker;
+}
 
 class scheduler
 {
@@ -21,26 +24,24 @@ public:
 	static void terminate();
 
 	static void spawn_and_wait(task *t);
-	// static void sync();
 
-	task *root;
-
-// private:
+private:
 	friend class task;
 	friend class internal::worker;
 
 	scheduler();
 	~scheduler();
 
+	static std::atomic_bool is_active;
+
+	task *root;
+
 	static size_t workers_count;
 	static internal::worker **workers;
 
-	static internal::worker *get_victim(internal::worker *thief);
-	static std::atomic_bool m_is_active;
-	static bool is_active();
-
 	static void wait_workers_fork();
 
+	static internal::worker *get_victim(internal::worker *thief);
 };
 
 } /* namespace:staccato */ 

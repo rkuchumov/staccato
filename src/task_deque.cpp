@@ -1,7 +1,6 @@
-#include <atomic>
-
 #include "utils.h"
-#include "deque.h"
+#include "task_deque.h"
+#include "task.h"
 // #include "statistics.h"
 
 namespace staccato
@@ -161,13 +160,6 @@ void task_deque::resize()
 
 	COUNT(resize);
 }
-
-#if STACCATO_SAMPLE_DEQUES_SIZES
-size_t task_deque::get_top()
-{
-	return load_consume(top).value;
-}
-#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 } // namespace internal
 } // namespace stacccato

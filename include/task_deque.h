@@ -1,11 +1,16 @@
 #ifndef STACCATO_DEQUE_H
 #define STACCATO_DEQUE_H
 
+#include <atomic>
+#include <cstddef>
+
 #include "constants.h"
-#include "task.h"
 
 namespace staccato
 {
+
+class task;
+
 namespace internal
 {
 
@@ -18,10 +23,6 @@ public:
 	void put(task *t);
 	task *take();
 	task *steal();
-
-#if STACCATO_SAMPLE_DEQUES_SIZES
-	size_t get_top();
-#endif // STACCATO_SAMPLE_DEQUES_SIZES
 
 private:
 	typedef std::atomic<task *> atomic_task;

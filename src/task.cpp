@@ -1,6 +1,7 @@
 #include "utils.h"
 #include "task.h"
 #include "scheduler.h"
+#include "worker.h"
 
 namespace staccato
 {
@@ -13,7 +14,6 @@ task::task()
 , state(initializing)
 #endif // STACCATO_DEBUG
 {
-	// std::cout << "!!!" << parent << std::endl;
 }
 
 task::~task()
@@ -37,7 +37,7 @@ void task::spawn(task *t)
 
 	inc_relaxed(subtask_count);
 
-	executer->enqueue(t);
+	executer->pool.put(t);
 }
 
 void task::wait_for_all()
@@ -50,15 +50,8 @@ void task::wait_for_all()
 	// TODO: wrap this function, it should be private
 	executer->task_loop(this);
 
-	// scheduler::task_loop(#<{(|parent=|)}>#this);
-
 	ASSERT(subtask_count == 0,
 		"Task still has subtaks after task_loop()");
-}
-
-void task::set_executer(internal::worker *worker)
-{
-	executer = worker;
 }
 
 #if STACCATO_DEBUG

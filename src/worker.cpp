@@ -1,10 +1,8 @@
 #include "utils.h"
 #include "worker.h"
+#include "task.h"
 #include "scheduler.h"
 #include "constants.h"
-
-#include <unistd.h>
-
 
 namespace staccato
 {
@@ -54,7 +52,7 @@ void worker::task_loop(task *waiting, task *t)
 // 				t->set_state(task::executing);
 // #endif // STACCATO_DEBUG
 
-				t->set_executer(this);
+				t->executer = this;
 				t->execute();
 
 // #if STACCATO_DEBUG
@@ -81,7 +79,7 @@ void worker::task_loop(task *waiting, task *t)
 			}
 		} 
 
-		if (waiting == nullptr && !scheduler::is_active())
+		if (waiting == nullptr && !load_relaxed(scheduler::is_active))
 			return;
 		// std::cerr << std::this_thread::get_id() << "\n";
 
@@ -92,12 +90,6 @@ void worker::task_loop(task *waiting, task *t)
 	} 
 
 	ASSERT(false, "Must never get there");
-}
-
-void worker::enqueue(task *t)
-{
-	// std::cout << "put " << t << std::endl;
-	pool.put(t);
 }
 
 }
