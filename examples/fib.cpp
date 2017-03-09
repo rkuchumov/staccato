@@ -1,7 +1,8 @@
 #include <iostream>
 #include <atomic>
 
-#include "scheduler.h"
+#include <task.h>
+#include <scheduler.h>
 
 using namespace std;
 using namespace staccato;
