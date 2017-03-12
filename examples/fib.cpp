@@ -57,7 +57,7 @@ int fib(int n)
 
 int main()
 {
-	unsigned n = 39;
+	unsigned n = 20;
 	long answer;
 
 	scheduler::initialize(4);

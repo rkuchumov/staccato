@@ -25,7 +25,6 @@ worker::~worker()
 
 void worker::fork()
 {
-	std::cerr << "forking thread\n";
 	handle = new std::thread([=] {task_loop();});
 }
 
@@ -37,33 +36,29 @@ void worker::join()
 
 void worker::task_loop(task *waiting, task *t)
 {
-	// ASSERT(parent != nullptr || (parent == nullptr && my_pool != pool),
-	// 		"Root task must be executed only on master");
-
 	scheduler::wait_workers_fork();
 
 	while (true) {
 		while (true) { // Local tasks loop
 			if (t) {
 
-// #if STACCATO_DEBUG
-// 				ASSERT(t->get_state() == task::taken || t->get_state() == task::stolen,
-// 					"Incorrect task state: " << t->get_state_str());
-// 				t->set_state(task::executing);
-// #endif // STACCATO_DEBUG
+#if STACCATO_DEBUG
+				ASSERT(t->get_state() == task::taken || t->get_state() == task::stolen,
+					"Incorrect task state: " << t->get_state_str());
+				t->set_state(task::executing);
+#endif // STACCATO_DEBUG
 
 				t->executer = this;
 				t->execute();
 
-// #if STACCATO_DEBUG
-// 				ASSERT(t->get_state() == task::executing,
-// 					"Incorrect task state: " << t->get_state_str());
-// 				t->set_state(task::finished);
-//
-// 				ASSERT(t->subtask_count == 0,
-//
-// 						"Task still has subtaks after it has been executed");
-// #endif // STACCATO_DEBUG
+#if STACCATO_DEBUG
+				ASSERT(t->get_state() == task::executing,
+					"Incorrect task state: " << t->get_state_str());
+				t->set_state(task::finished);
+
+				ASSERT(t->subtask_count == 0,
+						"Task still has subtaks after it has been executed");
+#endif // STACCATO_DEBUG
 
 				if (t->parent != nullptr)
 					dec_relaxed(t->parent->subtask_count);
@@ -81,12 +76,10 @@ void worker::task_loop(task *waiting, task *t)
 
 		if (waiting == nullptr && !load_relaxed(scheduler::is_active))
 			return;
-		// std::cerr << std::this_thread::get_id() << "\n";
 
 		auto victim = scheduler::get_victim(this);
 
 		t = victim->pool.steal();
-		// std::cerr << std::this_thread::get_id() << " " << t << "\n";
 	} 
 
 	ASSERT(false, "Must never get there");

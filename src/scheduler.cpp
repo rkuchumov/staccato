@@ -1,17 +1,15 @@
 #include "utils.h"
 #include "scheduler.h"
 #include "worker.h"
+#include "task.h"
 
 namespace staccato
 {
+using namespace internal;
 
 std::atomic_bool scheduler::is_active(false);
-internal::worker **scheduler::workers;
+worker **scheduler::workers;
 size_t scheduler::workers_count(0);
-
-// #if STACCATO_DEBUG
-// thread_local size_t scheduler::my_id = 0;
-// #endif // STACCATO_DEBUG
 
 scheduler::scheduler()
 { }
@@ -27,15 +25,17 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 		nthreads = std::thread::hardware_concurrency();
 	workers_count = nthreads;
 
-	workers = new internal::worker *[workers_count];
+	Debug() << "Starting scheduler with " << workers_count << " workers";
+	Debug() << "Worker deque size: " << (1 << deque_log_size);
+
+	workers = new worker *[workers_count];
 	for (size_t i = 0; i < workers_count; ++i)
-		workers[i] = new internal::worker(deque_log_size);
+		workers[i] = new worker(deque_log_size);
 
 	for (size_t i = 1; i < workers_count; ++i)
 		workers[i]->fork();
 
 	is_active = true;
-
 }
 
 void scheduler::wait_workers_fork()
@@ -48,12 +48,12 @@ void scheduler::wait_workers_fork()
 void scheduler::terminate()
 {
 	ASSERT(is_active, "Task schedulter is not initializaed yet");
-	std::cerr << "terminating\n";
+	Debug() << "Terminating scheduler\n";
 
 	is_active = false;
 
 // #if STACCATO_STATISTICS
-// 	internal::statistics::terminate();
+// 	statistics::terminate();
 // #endif // STACCATO_STATISTICS
 
 	for (size_t i = 1; i < workers_count; ++i)
@@ -63,7 +63,6 @@ void scheduler::terminate()
 		delete workers[i];
 
 	delete []workers;
-
 }
 
 void scheduler::spawn_and_wait(task *t)
@@ -71,21 +70,18 @@ void scheduler::spawn_and_wait(task *t)
 	ASSERT(workers != nullptr, "Task Pool is not initialized");
 	ASSERT(workers[0] != nullptr, "Task Pool is not initialized");
 
-	// TODO: name this worker
-	// workers[0]->enqueue(t);
-	//
-	// ASSERT(t->parent == nullptr, "parent of a root should be null");
-
+	ASSERT(t->get_state() == task::initializing,
+			"Incorrect task state: " << t->get_state_str());
+	t->set_state(task::taken);
 	workers[0]->task_loop(t, t);
-	// workers[0]->task_loop();
 }
 
-internal::worker *scheduler::get_victim(internal::worker *thief)
+worker *scheduler::get_victim(worker *thief)
 {
 	ASSERT(workers_count != 0, "Stealing when scheduler has a single worker");
 
 	size_t n = workers_count;
-	size_t i = internal::xorshift_rand() % n;
+	size_t i = xorshift_rand() % n;
 	auto victim = workers[i];
 	if (victim == thief) {
 		i++;
@@ -93,10 +89,6 @@ internal::worker *scheduler::get_victim(internal::worker *thief)
 		victim = workers[i];
 	}
 
-	// std::cerr << n << " stealing " << workers[0] << " " << workers[1] << std::endl;
-
-	// ASSERT(victim_pool != nullptr, "Stealing from NULL deque");
-	// ASSERT(victim_pool != my_pool, "Stealing from my own deque");
 	return victim;
 }
 

@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <cassert>
+#include <iostream>
+#include <sstream>
 
 #include "constants.h"
 
@@ -12,7 +14,7 @@
 #	define COUNT(event) do {} while (false);
 #endif // STACCATO_STATISTICS
 
-// #if STACCATO_DEBUG
+#if STACCATO_DEBUG
 #   define ASSERT(condition, message) \
     do { \
         if (!(condition)) { \
@@ -21,9 +23,9 @@
             std::exit(EXIT_FAILURE); \
         } \
     } while (false)
-// #else
-// #   define ASSERT(condition, message) do { } while (false)
-// #endif
+#else
+#   define ASSERT(condition, message) do { } while (false)
+#endif
 
 #define load_relaxed(var) (var).load(std::memory_order_relaxed)
 #define load_acquire(var) (var).load(std::memory_order_acquire)
@@ -53,38 +55,50 @@ inline uint32_t xorshift_rand() {
 	return x;
 }
 
-#if STACCATO_SAMPLE_DEQUES_SIZES
-
-inline uint64_t rdtsc()
+class Debug
 {
-    uint32_t hi, lo;
+public:
+	Debug(size_t indent = 0)
+	: m_printed(false)
+	, m_indent(indent)
+	{
+		m_buffer << "[STACCATO] ";
+		for (size_t i = 0; i < m_indent; ++i) {
+			m_buffer << "   ";
+		}
+	}
 
-#if defined(__i386__)
-	asm volatile("RDTSCP\n\t"
-		"mov %%edx, %0\n\t"
-		"mov %%eax, %1\n\t"
-		"CPUID\n\t"
-		: "=r" (hi), "=r" (lo)
-		:: "%eax", "%ebx", "%ecx", "%edx");
-#elif defined(__x86_64__)
-	asm volatile("RDTSCP\n\t"
-		"mov %%edx, %0\n\t"
-		"mov %%eax, %1\n\t"
-		"CPUID\n\t"
-		: "=r" (hi), "=r" (lo)
-		:: "%rax", "%rbx", "%rcx", "%rdx");
-#else
-#error "You can't use STACCATO_SAMPLE_DEQUES_SIZES=1 on this machine. \
-	Support of RDTSCP is not implemented"
+	~Debug()
+	{
+		if (!m_printed)
+			print();
+	}
+
+	void print()
+	{
+	// TODO: make it thread safe
+#if STACCATO_DEBUG
+		m_buffer << std::endl;
+		std::cerr << m_buffer.str();
 #endif
+		m_printed = true;
+	}
 
-    return (static_cast<uint64_t> (hi) << 32) | lo;
-}
+	template <typename T>
+	Debug & operator<<(const T &value)
+	{
+		m_buffer << value;
+		return *this;
+	}
 
-#endif // STACCATO_SAMPLE_DEQUES_SIZES
-
-}
-}
+private:
+	std::ostringstream m_buffer;
+	bool m_printed;
+	size_t m_indent;
+};
+	
+} /* internal */ 
+} /* staccato */ 
 
 #endif /* end of include guard: STACCATO_UTILS_H */
 

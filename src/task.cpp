@@ -21,17 +21,14 @@ task::~task()
 
 void task::spawn(task *t)
 {
-	// ASSERT(t->subtask_count == 0,
-	// 	"Spawned task is not allowed to have subtasks");
-	// ASSERT(parent == nullptr || (parent != nullptr && state == executing),
-	// 	"Incorrect current task state: " << t->get_state_str());
-	// ASSERT(t->state == initializing,
-	// 	"Incorrect newtask state: " << t->get_state_str());
+	ASSERT(t->subtask_count == 0,
+		"Spawned task is not allowed to have subtasks");
+	ASSERT(t->state == initializing,
+		"Incorrect newtask state: " << t->get_state_str());
 
 #if STACCATO_DEBUG
 	t->state = spawning;
 #endif // STACCATO_DEBUG
-	// std::cerr << "t: : " << this << std::endl;
 
 	t->parent = this;
 
@@ -47,7 +44,6 @@ void task::wait_for_all()
 
 	ASSERT(executer != nullptr, "Executed by nullptr");
 
-	// TODO: wrap this function, it should be private
 	executer->task_loop(this);
 
 	ASSERT(subtask_count == 0,
