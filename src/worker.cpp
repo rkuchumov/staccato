@@ -25,7 +25,12 @@ worker::~worker()
 
 void worker::fork()
 {
-	handle = new std::thread([=] {task_loop();});
+	handle = new std::thread([=] {
+			scheduler::wait_workers_fork();
+			Debug() << "Starting worker::tasks_loop()";
+			task_loop();
+		}
+	);
 }
 
 void worker::join()
@@ -36,15 +41,13 @@ void worker::join()
 
 void worker::task_loop(task *waiting, task *t)
 {
-	scheduler::wait_workers_fork();
-
 	while (true) {
 		while (true) { // Local tasks loop
 			if (t) {
 
 #if STACCATO_DEBUG
 				ASSERT(t->get_state() == task::taken || t->get_state() == task::stolen,
-					"Incorrect task state: " << t->get_state_str());
+					"Incorrect task state: " << t->get_state());
 				t->set_state(task::executing);
 #endif // STACCATO_DEBUG
 
@@ -53,7 +56,7 @@ void worker::task_loop(task *waiting, task *t)
 
 #if STACCATO_DEBUG
 				ASSERT(t->get_state() == task::executing,
-					"Incorrect task state: " << t->get_state_str());
+					"Incorrect task state: " << t->get_state());
 				t->set_state(task::finished);
 
 				ASSERT(t->subtask_count == 0,
@@ -74,8 +77,10 @@ void worker::task_loop(task *waiting, task *t)
 			}
 		} 
 
-		if (waiting == nullptr && !load_relaxed(scheduler::is_active))
+		if (load_relaxed(scheduler::state) == scheduler::terminating) {
+			Debug() << "Worker exiting (empty queue, scheduler is terminated)";
 			return;
+		}
 
 		auto victim = scheduler::get_victim(this);
 

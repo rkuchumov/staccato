@@ -33,7 +33,7 @@ task_deque::~task_deque()
 void task_deque::put(task *new_task)
 {
 	ASSERT(new_task->get_state() == task::spawning,
-		"Incorrect task state: " << new_task->get_state_str());
+		"Incorrect task state: " << new_task->get_state());
 
 	size_t b = load_relaxed(bottom);
 	size_t t = load_acquire(top);
@@ -87,7 +87,7 @@ task *task_deque::take()
 #if STACCATO_DEBUG
 	// ASSERT(r != nullptr, "Taken NULL task from non-empty deque");
 	ASSERT(r->get_state() == task::ready,
-			"Incorrect task state: " << r->get_state_str());
+			"Incorrect task state: " << r->get_state());
 	r->set_state(task::taken);
 #endif // STACCATO_DEBUG
 
@@ -118,7 +118,7 @@ task *task_deque::steal()
 #if STACCATO_DEBUG
 	// ASSERT(r != nullptr, "Stolen NULL task");
 	ASSERT(r->get_state() == task::ready,
-			"Incorrect task state: " << r->get_state_str());
+			"Incorrect task state: " << r->get_state());
 	r->set_state(task::stolen);
 #endif // STACCATO_DEBUG
 

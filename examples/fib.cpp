@@ -55,12 +55,16 @@ int fib(int n)
     return b;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 	unsigned n = 20;
 	long answer;
 
-	scheduler::initialize(4);
+	if (argc == 2) {
+		n = atoi(argv[1]);
+	}
+
+	scheduler::initialize();
 
 	FibTask root(n, &answer);
 	scheduler::spawn_and_wait(&root);
@@ -72,6 +76,7 @@ int main()
 		cout << "wrong\n";
 
 	scheduler::terminate();
+	cout << "out\n";
 
 	return 0;
 }

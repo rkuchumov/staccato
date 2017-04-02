@@ -5,6 +5,8 @@
 #include <cassert>
 #include <iostream>
 #include <sstream>
+#include <thread>
+#include <iomanip>
 
 #include "constants.h"
 
@@ -62,7 +64,13 @@ public:
 	: m_printed(false)
 	, m_indent(indent)
 	{
-		m_buffer << "[STACCATO] ";
+		m_buffer << "[STACCATO]";
+
+		m_buffer << "[";
+		m_buffer << std::setfill('0') << std::setw(5)
+			<< std::hash<std::thread::id>()(std::this_thread::get_id()) % 100000;
+		m_buffer << "] ";
+
 		for (size_t i = 0; i < m_indent; ++i) {
 			m_buffer << "   ";
 		}

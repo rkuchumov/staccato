@@ -7,9 +7,9 @@ namespace staccato
 {
 using namespace internal;
 
-std::atomic_bool scheduler::is_active(false);
 worker **scheduler::workers;
 size_t scheduler::workers_count(0);
+std::atomic<scheduler::state_t> scheduler::state(terminated);
 
 scheduler::scheduler()
 { }
@@ -19,7 +19,8 @@ scheduler::~scheduler()
 
 void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 {
-	ASSERT(is_active == false, "Schdeler is already initialized");
+	ASSERT(state == state_t::terminated, "Schdeler is already initialized");
+	state = state_t::initializing;
 
 	if (nthreads == 0)
 		nthreads = std::thread::hardware_concurrency();
@@ -35,22 +36,30 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 	for (size_t i = 1; i < workers_count; ++i)
 		workers[i]->fork();
 
-	is_active = true;
+	state = state_t::initialized;
 }
 
 void scheduler::wait_workers_fork()
 {
-	while (!load_consume(is_active)) {
+	Debug() << "Wating for others workers to start";
+
+	ASSERT(state == state_t::initializing || state_t::initialized,
+			"Incorrect scheduler state");
+
+	while(load_consume(state) == state_t::initializing) {
 		std::this_thread::yield();
 	}
+
+	ASSERT(state == state_t::initialized,
+			"Incorrect scheduler state");
 }
 
 void scheduler::terminate()
 {
-	ASSERT(is_active, "Task schedulter is not initializaed yet");
-	Debug() << "Terminating scheduler\n";
-
-	is_active = false;
+	ASSERT(state == state_t::initialized,
+			"Incorrect scheduler state");
+	Debug() << "Terminating";
+	state = terminating;
 
 // #if STACCATO_STATISTICS
 // 	statistics::terminate();
@@ -63,6 +72,10 @@ void scheduler::terminate()
 		delete workers[i];
 
 	delete []workers;
+
+	state = terminated;
+
+	Debug() << "Terminated";
 }
 
 void scheduler::spawn_and_wait(task *t)
@@ -70,9 +83,12 @@ void scheduler::spawn_and_wait(task *t)
 	ASSERT(workers != nullptr, "Task Pool is not initialized");
 	ASSERT(workers[0] != nullptr, "Task Pool is not initialized");
 
+#if STACCATO_DEBUG
 	ASSERT(t->get_state() == task::initializing,
-			"Incorrect task state: " << t->get_state_str());
+			"Incorrect task state: " << t->get_state());
 	t->set_state(task::taken);
+#endif
+
 	workers[0]->task_loop(t, t);
 }
 

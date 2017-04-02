@@ -32,7 +32,13 @@ private:
 	scheduler();
 	~scheduler();
 
-	static std::atomic_bool is_active;
+	enum state_t { 
+		terminated,
+		initializing,
+		initialized,
+		terminating,
+	};
+	static std::atomic<state_t> state;
 
 	task *root;
 

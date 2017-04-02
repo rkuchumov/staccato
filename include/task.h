@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <atomic>
+#include <ostream>
 
 #include "constants.h"
 
@@ -23,7 +24,7 @@ public:
 	void wait_for_all();
 
 #if STACCATO_DEBUG
-	enum {
+	enum task_state {
 		undefined    = 0,
 		initializing = 1,
 		spawning     = 2,
@@ -35,7 +36,7 @@ public:
 	};
 	void set_state(unsigned s);
 	unsigned get_state();
-	const char *get_state_str();
+	std::atomic_uint state;
 #endif // STACCATO_DEBUG
 
 	virtual void execute() = 0;
@@ -49,10 +50,11 @@ private:
 
 	std::atomic_size_t subtask_count;
 
-#if STACCATO_DEBUG
-	std::atomic_uint state;
-#endif // STACCATO_DEBUG
 };
+
+#if STACCATO_DEBUG
+std::ostream& operator<<(std::ostream & os, task::task_state &state);
+#endif // STACCATO_DEBUG
 
 }
 
