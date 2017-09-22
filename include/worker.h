@@ -28,8 +28,12 @@ public:
 
 	task_deque pool;
 
+	bool ready() const;
+
 private:
 	std::thread *handle;
+	std::atomic_bool m_ready;
+
 };
 
 }

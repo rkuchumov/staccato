@@ -12,6 +12,7 @@ namespace internal
 worker::worker(size_t deque_log_size)
 : pool(deque_log_size)
 , handle(nullptr)
+, m_ready(false)
 {
 
 }
@@ -26,11 +27,17 @@ worker::~worker()
 void worker::fork()
 {
 	handle = new std::thread([=] {
-			scheduler::wait_workers_fork();
+			m_ready = true;
+			scheduler::wait_until_initilized();
 			Debug() << "Starting worker::tasks_loop()";
 			task_loop();
 		}
 	);
+}
+
+bool worker::ready() const
+{
+	return m_ready;
 }
 
 void worker::join()
@@ -77,7 +84,8 @@ void worker::task_loop(task *waiting, task *t)
 			}
 		} 
 
-		if (load_relaxed(scheduler::state) == scheduler::terminating) {
+		auto state = load_relaxed(scheduler::state);
+		if (state == scheduler::terminating) {
 			Debug() << "Worker exiting (empty queue, scheduler is terminated)";
 			return;
 		}

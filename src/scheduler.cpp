@@ -36,22 +36,31 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 	for (size_t i = 1; i < workers_count; ++i)
 		workers[i]->fork();
 
+	for (size_t i = 1; i < workers_count; ++i) {
+		if (workers[i]->ready())
+			continue;
+
+		do {
+			Debug() << "Wating for worker #" << i << " to start";
+			std::this_thread::yield();
+		} while (!workers[i]->ready());
+	}
+
 	state = state_t::initialized;
 }
 
-void scheduler::wait_workers_fork()
+void scheduler::wait_until_initilized()
 {
 	Debug() << "Wating for others workers to start";
 
 	ASSERT(state == state_t::initializing || state_t::initialized,
 			"Incorrect scheduler state");
 
-	while(load_consume(state) == state_t::initializing) {
+	while (load_consume(state) == state_t::initializing) {
 		std::this_thread::yield();
 	}
 
-	ASSERT(state == state_t::initialized,
-			"Incorrect scheduler state");
+	ASSERT(state != state_t::initializing, "Incorrect scheduler state");
 }
 
 void scheduler::terminate()

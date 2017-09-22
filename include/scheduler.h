@@ -45,7 +45,7 @@ private:
 	static size_t workers_count;
 	static internal::worker **workers;
 
-	static void wait_workers_fork();
+	static void wait_until_initilized();
 
 	static internal::worker *get_victim(internal::worker *thief);
 };
