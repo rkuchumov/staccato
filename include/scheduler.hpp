@@ -5,7 +5,7 @@
 #include <thread>
 #include <atomic>
 
-#include "constants.h"
+#include "constants.hpp"
 
 namespace staccato
 {
@@ -42,8 +42,11 @@ private:
 
 	task *root;
 
+	static void wait_workers_fork();
+
 	static size_t workers_count;
 	static internal::worker **workers;
+
 
 	static void wait_until_initilized();
 

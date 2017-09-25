@@ -59,3 +59,4 @@ function(my_add_test name sources)
 
 endfunction()
 
+my_add_test(test_task_deque task_deque.cpp)

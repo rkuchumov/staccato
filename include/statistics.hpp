@@ -5,7 +5,7 @@
 #include <thread>
 #include <chrono>
 
-#include "constants.h"
+#include "constants.hpp"
 
 namespace staccato
 {

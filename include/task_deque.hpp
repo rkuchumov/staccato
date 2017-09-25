@@ -4,7 +4,7 @@
 #include <atomic>
 #include <cstddef>
 
-#include "constants.h"
+#include "constants.hpp"
 
 namespace staccato
 {
@@ -31,11 +31,11 @@ private:
 		atomic_task *buffer;
 	} array_t;
 
-	STACCATO_ALIGN std::atomic_size_t top;
+	STACCATO_ALIGN std::atomic_size_t m_top;
 
-	STACCATO_ALIGN std::atomic_size_t bottom;
+	STACCATO_ALIGN std::atomic_size_t m_bottom;
 
-	STACCATO_ALIGN std::atomic<array_t *> array;
+	STACCATO_ALIGN std::atomic<array_t *> m_array;
 
 	void resize();
 };

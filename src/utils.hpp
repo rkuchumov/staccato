@@ -8,7 +8,7 @@
 #include <thread>
 #include <iomanip>
 
-#include "constants.h"
+#include "constants.hpp"
 
 #if STACCATO_STATISTICS
 #	define COUNT(event) internal::statistics::count(internal::statistics::event);

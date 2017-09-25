@@ -1,7 +1,7 @@
-#include "utils.h"
-#include "scheduler.h"
-#include "worker.h"
-#include "task.h"
+#include "utils.hpp"
+#include "scheduler.hpp"
+#include "worker.hpp"
+#include "task.hpp"
 
 namespace staccato
 {
@@ -36,6 +36,13 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 	for (size_t i = 1; i < workers_count; ++i)
 		workers[i]->fork();
 
+	wait_workers_fork();
+
+	state = state_t::initialized;
+}
+
+void scheduler::wait_workers_fork()
+{
 	for (size_t i = 1; i < workers_count; ++i) {
 		if (workers[i]->ready())
 			continue;
@@ -45,8 +52,6 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 			std::this_thread::yield();
 		} while (!workers[i]->ready());
 	}
-
-	state = state_t::initialized;
 }
 
 void scheduler::wait_until_initilized()

@@ -5,7 +5,7 @@
 #include <atomic>
 #include <ostream>
 
-#include "constants.h"
+#include "constants.hpp"
 
 namespace staccato
 {

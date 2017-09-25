@@ -4,8 +4,8 @@
 #include <cstdlib>
 #include <thread>
 
-#include "task_deque.h"
-#include "constants.h"
+#include "task_deque.hpp"
+#include "constants.hpp"
 
 namespace staccato
 {

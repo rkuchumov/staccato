@@ -2,9 +2,9 @@
 #include <vector>
 #include <cstring>
 
-#include "utils.h"
-#include "statistics.h"
-#include "scheduler.h"
+#include "utils.hpp"
+#include "statistics.hpp"
+#include "scheduler.hpp"
 
 namespace staccato
 {

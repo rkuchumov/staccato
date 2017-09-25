@@ -1,8 +1,8 @@
-#include "utils.h"
-#include "worker.h"
-#include "task.h"
-#include "scheduler.h"
-#include "constants.h"
+#include "utils.hpp"
+#include "worker.hpp"
+#include "task.hpp"
+#include "scheduler.hpp"
+#include "constants.hpp"
 
 namespace staccato
 {
