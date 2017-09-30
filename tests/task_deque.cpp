@@ -2,6 +2,7 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <chrono>
 
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
@@ -18,7 +19,7 @@ TEST(ctor, creating_and_deleteing) {
 	delete d;
 }
 
-TEST(put_take, without_resize) {
+TEST(take, without_resize) {
 	size_t size = 5;
 	size_t ntasks = 1 << (size - 1);
 
@@ -44,7 +45,7 @@ TEST(put_take, without_resize) {
 	delete deque;
 }
 
-TEST(put_take, with_resize) {
+TEST(take, with_resize) {
 	size_t size = 5;
 	size_t ntasks = 1 << (size + 2);
 
@@ -70,7 +71,7 @@ TEST(put_take, with_resize) {
 	delete deque;
 }
 
-TEST(put_steal, sequential) {
+TEST(steal, sequential) {
 	size_t size = 5;
 	size_t ntasks = 1 << (size + 2);
 
@@ -97,7 +98,7 @@ TEST(put_steal, sequential) {
 	delete deque;
 }
 
-TEST(put_steal, multiple_steals) {
+TEST(steal, concurrent_steal) {
 	size_t size = 12;
 	size_t ntasks = 1 << (size + 2);
 
@@ -112,32 +113,34 @@ TEST(put_steal, multiple_steals) {
 	}
 
 	std::atomic_size_t nready(0);
+	std::atomic_bool stop(false);
 	static const size_t nthreads = 4;
 	std::vector<task *> stolen[nthreads];
-	std::thread *threads[nthreads];
+	std::thread threads[nthreads];
 
-	auto steal = [&](size_t id, size_t nwait) {
+	auto steal = [&](size_t id) {
 		nready++;
 
-		while (nready != nwait)
+		while (nready != nthreads)
 			std::this_thread::yield();
 
-		while (true) {
+		while (!stop) {
 			auto t = deque->steal();
-			if (!t)
-				break;
-
-			stolen[id].push_back(t);
+			if (t)
+				stolen[id].push_back(t);
 		}
 	};
 
-
 	for (size_t i = 0; i < nthreads; ++i) {
-		threads[i] = new std::thread(steal, i, nthreads);
+		threads[i] = std::thread(steal, i);
 	}
 
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+	stop = true;
+
 	for (size_t i = 0; i < nthreads; ++i) {
-		threads[i]->join();
+		threads[i].join();
+		std::cerr << "thread #" << i << " tasks: " << stolen[i].size() << "\n";
 	}
 
 	for (size_t i = 0; i < nthreads; ++i) {
@@ -155,7 +158,7 @@ TEST(put_steal, multiple_steals) {
 	delete deque;
 }
 
-TEST(put_steal_take, multiple_steals) {
+TEST(steal_take, concurrent_steal_and_take) {
 	size_t size = 12;
 	size_t ntasks = 1 << (size + 2);
 
@@ -170,32 +173,106 @@ TEST(put_steal_take, multiple_steals) {
 	}
 
 	std::atomic_size_t nready(0);
-	static const size_t nthreads = 4 + 1;
+	std::atomic_bool stop(false);
+	static const size_t nthreads = 3 + 1;
 	std::vector<task *> stolen[nthreads];
 	std::vector<task *> taken;
-	std::thread *threads[nthreads];
+	std::thread threads[nthreads];
 
-	auto steal = [&](size_t id, size_t nwait, bool steal) {
+	auto steal = [&](size_t id, bool steal) {
 		nready++;
 
-		while (nready != nwait)
+		while (nready != nthreads)
 			std::this_thread::yield();
 
-		while (true) {
+		while (!stop) {
 			auto t = steal ? deque->steal() : deque->take();
-			if (!t)
-				break;
-
-			stolen[id].push_back(t);
+			if (t)
+				stolen[id].push_back(t);
 		}
 	};
 
 	for (size_t i = 0; i < nthreads; ++i) {
-		threads[i] = new std::thread(steal, i, nthreads, i != 0);
+		threads[i] = std::thread(steal, i, i != 0);
+	}
+
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+	stop = true;
+
+	for (size_t i = 0; i < nthreads; ++i) {
+		threads[i].join();
+		std::cerr << "thread #" << i << " tasks: " << stolen[i].size() << "\n";
 	}
 
 	for (size_t i = 0; i < nthreads; ++i) {
-		threads[i]->join();
+		for (auto t : stolen[i]) {
+			auto found = std::find(tasks.begin(), tasks.end(), t);
+			ASSERT_TRUE(found != tasks.end());
+			tasks.erase(found);
+
+			delete t;
+		}
+	}
+
+	EXPECT_TRUE(tasks.empty());
+
+	delete deque;
+}
+
+
+TEST(put_steal_take, concurrent_steal_take_and_put) {
+	size_t size = 12;
+	std::atomic_size_t ntasks(1 << (size + 2));
+
+	auto deque = new task_deque(size);
+
+	std::vector<task *> tasks;
+
+	std::atomic_size_t nready(0);
+	std::atomic_bool stop(false);
+	static const size_t nthreads = 3 + 1;
+	std::vector<task *> stolen[nthreads];
+	std::vector<task *> taken;
+	std::thread threads[nthreads];
+
+	auto steal = [&](size_t id, bool steal) {
+		nready++;
+
+		while (nready != nthreads)
+			std::this_thread::yield();
+
+		while (!stop) {
+			if (steal) {
+				auto t = deque->steal();
+				if (t)
+					stolen[id].push_back(t);
+			} else {
+				if (ntasks > 0) {
+					auto new_task = new task_mock();
+					tasks.push_back(new_task);
+					deque->put(new_task);
+					ntasks--;
+				}
+
+				// std::this_thread::yield();
+
+				auto t = deque->take();
+				if (t)
+					stolen[id].push_back(t);
+			}
+		}
+	};
+
+	for (size_t i = 0; i < nthreads; ++i) {
+		threads[i] = std::thread(steal, i, i != 0);
+	}
+
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+	stop = true;
+
+	for (size_t i = 0; i < nthreads; ++i) {
+		threads[i].join();
+		std::cerr << "thread #" << i << " tasks: " << stolen[i].size() << "\n";
 	}
 
 	for (size_t i = 0; i < nthreads; ++i) {
