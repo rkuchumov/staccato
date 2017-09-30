@@ -7,16 +7,11 @@ namespace staccato
 {
 
 task::task()
-#if STACCATO_DEBUG
-: state(initializing)
-, parent(nullptr)
-#else
 : parent(nullptr)
-#endif // STACCATO_DEBUG
 , executer(nullptr)
 , subtask_count(0)
-{
-}
+, next(nullptr)
+{ }
 
 task::~task()
 { }
@@ -25,12 +20,6 @@ void task::spawn(task *t)
 {
 	ASSERT(t->subtask_count == 0,
 		"Spawned task is not allowed to have subtasks");
-	ASSERT(t->state == initializing,
-		"Incorrect newtask state: " << t->get_state());
-
-#if STACCATO_DEBUG
-	t->state = spawning;
-#endif // STACCATO_DEBUG
 
 	t->parent = this;
 
@@ -39,11 +28,8 @@ void task::spawn(task *t)
 	executer->pool.put(t);
 }
 
-void task::wait_for_all()
+void task::wait()
 {
-	// ASSERT(parent == nullptr || (parent != nullptr && state == executing),
-		// "Incorrect current task state: " << get_state());
-
 	ASSERT(executer != nullptr, "Executed by nullptr");
 
 	executer->task_loop(this);
@@ -52,36 +38,20 @@ void task::wait_for_all()
 		"Task still has subtaks after task_loop()");
 }
 
-#if STACCATO_DEBUG
-void task::set_state(unsigned s)
+void task::then(task *t)
 {
-	state = s;
+	// TODO: append to next
+	next = t;
 }
 
-unsigned task::get_state()
+void *task::operator new(size_t sz)
 {
-	return state;
+	return std::malloc(sz);
 }
 
-std::ostream& operator<<(std::ostream & os, task::task_state &state)
+void task::operator delete(void *ptr) noexcept
 {
-	switch (state) {
-		case task::task_state::undefined    : os << "undefined"    ; break ;
-		case task::task_state::initializing : os << "initializing" ; break ;
-		case task::task_state::spawning     : os << "spawning"     ; break ;
-		case task::task_state::ready        : os << "ready"        ; break ;
-		case task::task_state::taken        : os << "taken"        ; break ;
-		case task::task_state::stolen       : os << "stolen"       ; break ;
-		case task::task_state::executing    : os << "executing"    ; break ;
-		case task::task_state::finished     : os << "finished"     ; break ;
-		default                             : break;
-	}
-
-	ASSERT(false, "String representation for " << state << " is not defined");
-	return os;
+	std::free(ptr);
 }
-
-
-#endif // STACCATO_DEBUG
 
 } // namespace stacccato

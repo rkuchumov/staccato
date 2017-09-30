@@ -14,6 +14,9 @@
 using namespace staccato;
 using namespace staccato::internal;
 
+static const size_t test_timeout = 2;
+static const size_t nthreads = 4;
+
 TEST(ctor, creating_and_deleteing) {
 	auto d = new task_deque(4);
 	delete d;
@@ -114,7 +117,6 @@ TEST(steal, concurrent_steal) {
 
 	std::atomic_size_t nready(0);
 	std::atomic_bool stop(false);
-	static const size_t nthreads = 4;
 	std::vector<task *> stolen[nthreads];
 	std::thread threads[nthreads];
 
@@ -135,9 +137,10 @@ TEST(steal, concurrent_steal) {
 		threads[i] = std::thread(steal, i);
 	}
 
-	std::this_thread::sleep_for(std::chrono::seconds(1));
+	std::this_thread::sleep_for(std::chrono::seconds(test_timeout));
 	stop = true;
 
+	std::cerr << "total tasks: " << ntasks << "\n";
 	for (size_t i = 0; i < nthreads; ++i) {
 		threads[i].join();
 		std::cerr << "thread #" << i << " tasks: " << stolen[i].size() << "\n";
@@ -174,7 +177,6 @@ TEST(steal_take, concurrent_steal_and_take) {
 
 	std::atomic_size_t nready(0);
 	std::atomic_bool stop(false);
-	static const size_t nthreads = 3 + 1;
 	std::vector<task *> stolen[nthreads];
 	std::vector<task *> taken;
 	std::thread threads[nthreads];
@@ -196,9 +198,10 @@ TEST(steal_take, concurrent_steal_and_take) {
 		threads[i] = std::thread(steal, i, i != 0);
 	}
 
-	std::this_thread::sleep_for(std::chrono::seconds(1));
+	std::this_thread::sleep_for(std::chrono::seconds(test_timeout));
 	stop = true;
 
+	std::cerr << "total tasks: " << ntasks << "\n";
 	for (size_t i = 0; i < nthreads; ++i) {
 		threads[i].join();
 		std::cerr << "thread #" << i << " tasks: " << stolen[i].size() << "\n";
@@ -222,7 +225,7 @@ TEST(steal_take, concurrent_steal_and_take) {
 
 TEST(put_steal_take, concurrent_steal_take_and_put) {
 	size_t size = 12;
-	std::atomic_size_t ntasks(1 << (size + 2));
+	size_t ntasks = 1 << (size + 2);
 
 	auto deque = new task_deque(size);
 
@@ -230,7 +233,8 @@ TEST(put_steal_take, concurrent_steal_take_and_put) {
 
 	std::atomic_size_t nready(0);
 	std::atomic_bool stop(false);
-	static const size_t nthreads = 3 + 1;
+	std::atomic_size_t tasks_left(ntasks);
+
 	std::vector<task *> stolen[nthreads];
 	std::vector<task *> taken;
 	std::thread threads[nthreads];
@@ -247,14 +251,12 @@ TEST(put_steal_take, concurrent_steal_take_and_put) {
 				if (t)
 					stolen[id].push_back(t);
 			} else {
-				if (ntasks > 0) {
+				if (tasks_left > 0) {
 					auto new_task = new task_mock();
 					tasks.push_back(new_task);
 					deque->put(new_task);
-					ntasks--;
+					tasks_left--;
 				}
-
-				// std::this_thread::yield();
 
 				auto t = deque->take();
 				if (t)
@@ -267,9 +269,10 @@ TEST(put_steal_take, concurrent_steal_take_and_put) {
 		threads[i] = std::thread(steal, i, i != 0);
 	}
 
-	std::this_thread::sleep_for(std::chrono::seconds(1));
+	std::this_thread::sleep_for(std::chrono::seconds(test_timeout));
 	stop = true;
 
+	std::cerr << "total tasks: " << ntasks << "\n";
 	for (size_t i = 0; i < nthreads; ++i) {
 		threads[i].join();
 		std::cerr << "thread #" << i << " tasks: " << stolen[i].size() << "\n";

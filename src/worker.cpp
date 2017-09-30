@@ -29,7 +29,6 @@ void worker::fork()
 	handle = new std::thread([=] {
 			m_ready = true;
 			scheduler::wait_until_initilized();
-			Debug() << "Starting worker::tasks_loop()";
 			task_loop();
 		}
 	);
@@ -48,27 +47,20 @@ void worker::join()
 
 void worker::task_loop(task *waiting, task *t)
 {
+	Debug() << "Starting worker::tasks_loop()";
+
 	while (true) {
 		while (true) { // Local tasks loop
 			if (t) {
+				for (auto s = t; s; s = s->next) {
+					s->executer = this;
+					s->execute();
+				}
 
-#if STACCATO_DEBUG
-				ASSERT(t->get_state() == task::taken || t->get_state() == task::stolen,
-					"Incorrect task state: " << t->get_state());
-				t->set_state(task::executing);
-#endif // STACCATO_DEBUG
-
-				t->executer = this;
-				t->execute();
-
-#if STACCATO_DEBUG
-				ASSERT(t->get_state() == task::executing,
-					"Incorrect task state: " << t->get_state());
-				t->set_state(task::finished);
-
-				ASSERT(t->subtask_count == 0,
-						"Task still has subtaks after it has been executed");
-#endif // STACCATO_DEBUG
+				ASSERT(
+					t->subtask_count == 0,
+					"Task still has subtaks after it has been executed"
+				);
 
 				if (t->parent != nullptr)
 					dec_relaxed(t->parent->subtask_count);

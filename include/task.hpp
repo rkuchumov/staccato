@@ -21,25 +21,15 @@ public:
 	virtual ~task();
 
 	void spawn(task *t);
-	void wait_for_all();
+	void wait();
 
-#if STACCATO_DEBUG
-	enum task_state {
-		undefined    = 0,
-		initializing = 1,
-		spawning     = 2,
-		ready        = 3,
-		taken        = 4,
-		stolen       = 5,
-		executing    = 6,
-		finished     = 7
-	};
-	void set_state(unsigned s);
-	unsigned get_state();
-	std::atomic_uint state;
-#endif // STACCATO_DEBUG
+	void then(task *t);
 
 	virtual void execute() = 0;
+
+	void *operator new(size_t sz);
+
+	void operator delete(void *ptr) noexcept;
 
 private:
 	friend class internal::worker;
@@ -50,11 +40,9 @@ private:
 
 	std::atomic_size_t subtask_count;
 
-};
+	task *next;
 
-#if STACCATO_DEBUG
-std::ostream& operator<<(std::ostream & os, task::task_state &state);
-#endif // STACCATO_DEBUG
+};
 
 }
 

@@ -11,12 +11,9 @@ class FibTask: public task
 {
 public:
 	FibTask (int n_, long *sum_): n(n_), sum(sum_)
-	{
-		// cerr << "ctor: " << n << "\n";
-	}
+	{ }
 
 	void execute() {
-		// cerr << "exec: " << n << "\n";
 		if (n <= 2) {
 			*sum = 1;
 			return;
@@ -29,7 +26,7 @@ public:
 		spawn(a);
 		spawn(b);
 
-		wait_for_all();
+		wait();
 
 		delete a;
 		delete b;
