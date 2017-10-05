@@ -25,6 +25,10 @@ public:
 
 	static void spawn_and_wait(task *t);
 
+	static void spawn(task *t);
+
+	static void wait();
+
 private:
 	friend class task;
 	friend class internal::worker;
@@ -40,7 +44,7 @@ private:
 	};
 	static std::atomic<state_t> state;
 
-	task *root;
+	static task *root;
 
 	static void wait_workers_fork();
 

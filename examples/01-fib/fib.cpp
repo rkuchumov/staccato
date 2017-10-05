@@ -64,7 +64,8 @@ int main(int argc, char *argv[])
 	scheduler::initialize();
 
 	FibTask root(n, &answer);
-	scheduler::spawn_and_wait(&root);
+	scheduler::spawn(&root);
+	scheduler::wait();
 
 	cout << "fib(" << n << ") = " << answer << "\n";
 	if (answer == fib(n))

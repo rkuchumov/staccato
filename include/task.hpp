@@ -10,6 +10,8 @@
 namespace staccato
 {
 
+class scheduler;
+
 namespace internal {
 class worker;
 }
@@ -33,6 +35,7 @@ public:
 
 private:
 	friend class internal::worker;
+	friend class scheduler;
 
 	task *parent;
 

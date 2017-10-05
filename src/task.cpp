@@ -25,6 +25,8 @@ void task::spawn(task *t)
 
 	inc_relaxed(subtask_count);
 
+	ASSERT(executer != nullptr, "Executed by nullptr");
+
 	executer->pool.put(t);
 }
 

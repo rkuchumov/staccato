@@ -28,6 +28,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(sources
 	"src/scheduler.cpp"
 	"src/task.cpp"
+	"src/root_task.cpp"
 	"src/task_deque.cpp"
 	"src/worker.cpp"
 )

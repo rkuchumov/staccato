@@ -29,6 +29,7 @@ void worker::fork()
 	handle = new std::thread([=] {
 			m_ready = true;
 			scheduler::wait_until_initilized();
+			Debug() << "Starting worker::tasks_loop()";
 			task_loop();
 		}
 	);
@@ -47,8 +48,6 @@ void worker::join()
 
 void worker::task_loop(task *waiting, task *t)
 {
-	Debug() << "Starting worker::tasks_loop()";
-
 	while (true) {
 		while (true) { // Local tasks loop
 			if (t) {

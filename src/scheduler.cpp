@@ -2,6 +2,7 @@
 #include "scheduler.hpp"
 #include "worker.hpp"
 #include "task.hpp"
+#include "root_task.hpp"
 
 namespace staccato
 {
@@ -10,6 +11,7 @@ using namespace internal;
 worker **scheduler::workers;
 size_t scheduler::workers_count(0);
 std::atomic<scheduler::state_t> scheduler::state(terminated);
+task *scheduler::root(nullptr);
 
 scheduler::scheduler()
 { }
@@ -38,6 +40,9 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 		workers[i]->fork();
 
 	wait_workers_fork();
+
+	root = new root_task();
+	root->executer = workers[0];
 
 	state = state_t::initialized;
 }
@@ -87,6 +92,18 @@ void scheduler::terminate()
 	delete []workers;
 
 	state = terminated;
+}
+
+void scheduler::spawn(task *t)
+{
+	ASSERT(root, "Root task is not initialized");
+	root->spawn(t);
+}
+
+void scheduler::wait()
+{
+	ASSERT(root, "Root task is not initialized");
+	root->wait();
 }
 
 void scheduler::spawn_and_wait(task *t)
