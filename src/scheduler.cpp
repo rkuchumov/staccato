@@ -1,8 +1,10 @@
 #include "utils.hpp"
 #include "scheduler.hpp"
 #include "worker.hpp"
+
 #include "task.hpp"
 #include "root_task.hpp"
+#include "lambda_task.hpp"
 
 namespace staccato
 {
@@ -98,6 +100,12 @@ void scheduler::spawn(task *t)
 {
 	ASSERT(root, "Root task is not initialized");
 	root->spawn(t);
+}
+
+void scheduler::spawn(std::function<void ()> fn)
+{
+	task *t = new lambda_task(fn);
+	spawn(t);
 }
 
 void scheduler::wait()

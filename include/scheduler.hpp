@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <thread>
 #include <atomic>
+#include <functional>
 
 #include "constants.hpp"
 
@@ -26,6 +27,8 @@ public:
 	static void spawn_and_wait(task *t);
 
 	static void spawn(task *t);
+
+	static void spawn(std::function <void()> fn);
 
 	static void wait();
 

@@ -29,6 +29,7 @@ set(sources
 	"src/scheduler.cpp"
 	"src/task.cpp"
 	"src/root_task.cpp"
+	"src/lambda_task.cpp"
 	"src/task_deque.cpp"
 	"src/worker.cpp"
 )
