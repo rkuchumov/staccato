@@ -41,17 +41,6 @@ private:
 	long *sum;
 };
 
-int fib(int n)
-{
-    int a = 1, b = 1;
-    for (int i = 3; i <= n; i++) {
-        int c = a + b;
-        a = b;
-        b = c;
-    }           
-    return b;
-}
-
 int main(int argc, char *argv[])
 {
 	unsigned n = 20;
@@ -67,14 +56,9 @@ int main(int argc, char *argv[])
 	scheduler::spawn(&root);
 	scheduler::wait();
 
-	cout << "fib(" << n << ") = " << answer << "\n";
-	if (answer == fib(n))
-		cout << "OK\n";
-	else
-		cout << "wrong\n";
-
 	scheduler::terminate();
-	cout << "done\n";
+
+	cout << "fib(" << n << ") = " << answer << "\n";
 
 	return 0;
 }

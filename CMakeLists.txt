@@ -43,6 +43,7 @@ if (STACCATO_BUILD_TESTS)
 endif()
 
 if (STACCATO_BUILD_TESTS OR STACCATO_BUILD_EXAMPLES)
-	add_subdirectory(examples/01-fib)
+	add_subdirectory(examples/01-class)
+	add_subdirectory(examples/02-lambda)
 endif()
 
