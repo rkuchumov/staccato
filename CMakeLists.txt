@@ -18,6 +18,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
 	add_definitions(-DSTACCATO_DEBUG=1)
 	set(CMAKE_VERBOSE_MAKEFILE TRUE)
 elseif (CMAKE_BUILD_TYPE MATCHES Release)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 	message("Release build.")
 endif ()
 
@@ -34,8 +35,26 @@ set(sources
 	"src/worker.cpp"
 )
 
-add_library(staccato ${sources})
+add_library(staccato SHARED ${sources})
 target_link_libraries(staccato pthread)
+
+install(TARGETS staccato DESTINATION lib)
+
+set(HEADERS
+	include/constants.hpp
+	include/lambda_task.hpp
+	include/root_task.hpp
+	include/scheduler.hpp
+	include/statistics.hpp
+	include/task.hpp
+	include/task_deque.hpp
+	include/worker.hpp
+)
+
+install(
+	FILES ${HEADERS}
+	DESTINATION include/staccato
+)
 
 if (STACCATO_BUILD_TESTS)
 	enable_testing()
