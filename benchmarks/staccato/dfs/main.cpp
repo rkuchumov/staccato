@@ -1,4 +1,5 @@
 #include <iostream>
+#include <vector>
 #include <chrono>
 #include <thread>
 
@@ -9,50 +10,60 @@ using namespace std;
 using namespace chrono;
 using namespace staccato;
 
-class FibTask: public task
+class DFSTask: public task
 {
 public:
-	FibTask (int n_, unsigned long *sum_): n(n_), sum(sum_)
-	{ }
+	DFSTask (size_t depth_, size_t breadth_, unsigned long *sum_)
+		: depth(depth_)
+		, breadth(breadth_)
+		, sum(sum_)
+	{ 
+		*sum = 0;
+	}
 
 	void execute() {
-		if (n <= 2) {
+		if (depth == 0) {
 			*sum = 1;
 			return;
 		}
 
-		unsigned long x, y;
-		FibTask *a = new FibTask(n - 1, &x);
-		FibTask *b = new FibTask(n - 2, &y);
+		vector<DFSTask *> tasks(breadth);
+		vector<unsigned long> sums(breadth);
 
-		spawn(a);
-		spawn(b);
+		for (size_t i = 0; i < breadth; ++i) {
+			tasks[i] = new DFSTask(depth - 1, breadth, &sums[i]);
+			spawn(tasks[i]);
+		}
 
 		wait();
 
-		delete a;
-		delete b;
-
-		*sum = x + y;
+		for (size_t i = 0; i < breadth; ++i) {
+			delete tasks[i];
+			*sum += sums[i];
+		}
 
 		return;
 	}
 
 private:
-	int n;
+	size_t depth;
+	size_t breadth;
 	unsigned long *sum;
 };
 
 int main(int argc, char *argv[])
 {
-	size_t n = 40;
+	size_t depth = 8;
+	size_t breadth = 8;
 	unsigned long answer;
 	size_t nthreads = 0;
 
 	if (argc >= 2)
 		nthreads = atoi(argv[1]);
 	if (argc >= 3)
-		n = atoi(argv[2]);
+		depth = atoi(argv[2]);
+	if (argc >= 4)
+		breadth = atoi(argv[3]);
 	if (nthreads == 0)
 		nthreads = thread::hardware_concurrency();
 
@@ -60,7 +71,7 @@ int main(int argc, char *argv[])
 
 	scheduler::initialize(nthreads);
 
-	auto root = new FibTask(n, &answer);
+	auto root = new DFSTask(depth, breadth, &answer);
 	scheduler::spawn_and_wait(root);
 	delete root;
 
@@ -69,10 +80,10 @@ int main(int argc, char *argv[])
 	auto stop = system_clock::now();
 
 	cout << "Scheduler:  staccato\n";
-	cout << "Benchmark:  fib\n";
+	cout << "Benchmark:  dfs\n";
 	cout << "Threads:    " << nthreads << "\n";
 	cout << "Time(us):   " << duration_cast<microseconds>(stop - start).count() << "\n";
-	cout << "Input:      " << n << "\n";
+	cout << "Input:      " << depth << " " << breadth << "\n";
 	cout << "Output:     " << answer << "\n";
 
 	return 0;
