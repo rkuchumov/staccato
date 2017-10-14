@@ -45,7 +45,6 @@ set(HEADERS
 	include/lambda_task.hpp
 	include/root_task.hpp
 	include/scheduler.hpp
-	include/statistics.hpp
 	include/task.hpp
 	include/task_deque.hpp
 	include/worker.hpp

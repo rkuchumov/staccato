@@ -7,9 +7,9 @@ namespace staccato
 {
 
 task::task()
-: parent(nullptr)
-, executer(nullptr)
+: executer(nullptr)
 , subtask_count(0)
+, parent_subtask_count(nullptr)
 , next(nullptr)
 { }
 
@@ -21,7 +21,7 @@ void task::spawn(task *t)
 	ASSERT(t->subtask_count == 0,
 		"Spawned task is not allowed to have subtasks");
 
-	t->parent = this;
+	t->parent_subtask_count = &subtask_count;
 
 	inc_relaxed(subtask_count);
 

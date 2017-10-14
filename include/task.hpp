@@ -37,14 +37,12 @@ private:
 	friend class internal::worker;
 	friend class scheduler;
 
-	task *parent;
-
 	internal::worker *executer;
 
 	std::atomic_size_t subtask_count;
+	std::atomic_size_t *parent_subtask_count;
 
 	task *next;
-
 };
 
 }

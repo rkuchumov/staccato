@@ -61,8 +61,8 @@ void worker::task_loop(task *waiting, task *t)
 					"Task still has subtaks after it has been executed"
 				);
 
-				if (t->parent != nullptr)
-					dec_relaxed(t->parent->subtask_count);
+				if (t->parent_subtask_count != nullptr)
+					dec_relaxed(*t->parent_subtask_count);
 			}
 
 			if (waiting != nullptr && load_relaxed(waiting->subtask_count) == 0)
