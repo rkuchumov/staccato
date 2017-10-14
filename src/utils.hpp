@@ -10,12 +10,6 @@
 
 #include "constants.hpp"
 
-#if STACCATO_STATISTICS
-#	define COUNT(event) internal::statistics::count(internal::statistics::event);
-#else
-#	define COUNT(event) do {} while (false);
-#endif // STACCATO_STATISTICS
-
 #if STACCATO_DEBUG
 #   define ASSERT(condition, message) \
     do { \

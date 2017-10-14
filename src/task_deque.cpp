@@ -47,8 +47,6 @@ void task_deque::put(task *new_task)
 	atomic_fence_release();
 
 	store_relaxed(m_bottom, b + 1);
-
-	COUNT(put);
 }
 
 task *task_deque::take()
@@ -70,14 +68,12 @@ task *task_deque::take()
 		// Check if they are not stollen
 		if (!cas_strong(m_top, t, t + 1)) {
 			m_bottom = b + 1;
-			COUNT(take_failed);
 			return nullptr;
 		}
 
 		m_bottom = b + 1;
 	}
 
-	COUNT(take);
 	return r;
 }
 
@@ -96,12 +92,9 @@ task *task_deque::steal()
 	task *r = load_relaxed(a->buffer[t & a->size_mask]);
 
 	// Victim doesn't have required amount of tasks
-	if (!cas_weak(m_top, t, t + 1)) {
-		COUNT(single_steal_failed);
+	if (!cas_weak(m_top, t, t + 1))
 		return nullptr;
-	}
 
-	COUNT(single_steal);
 	return r;
 }
 
@@ -124,8 +117,6 @@ void task_deque::resize()
 
 	delete []old->buffer;
 	delete old;
-
-	COUNT(resize);
 }
 
 } // namespace internal
