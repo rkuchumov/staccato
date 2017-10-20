@@ -12,7 +12,6 @@ namespace staccato
 {
 
 namespace internal {
-class task_deque;
 class worker;
 }
 
@@ -21,9 +20,7 @@ public:
 	task();
 	virtual ~task();
 
-	static void process(uint8_t *task, internal::worker *executer);
-
-	static bool has_finished(uint8_t *task);
+	virtual void execute() = 0;
 
 	uint8_t *child();
 
@@ -31,14 +28,11 @@ public:
 
 	void wait();
 
-	virtual void execute() = 0;
+private:
+	friend class internal::worker;
 
-	static size_t task_size;
-
-	static uint8_t *stack_allocate();
-
-// private:
-	// internal::task_deque *parent_pool;
+	static void process(internal::worker *executer, uint8_t *raw);
+	static bool has_finished(uint8_t *raw);
 
 	internal::worker *executer;
 

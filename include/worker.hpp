@@ -26,8 +26,12 @@ public:
 
 	bool ready() const;
 
+	const size_t elem_size;
+
+	uint8_t *task_stack;
+	size_t task_stack_end;
+
 	task_deque pool;
-// private:
 
 	std::thread *handle;
 	std::atomic_bool m_ready;

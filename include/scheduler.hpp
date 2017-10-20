@@ -38,8 +38,6 @@ public:
 
 	static void wait();
 
-	static size_t task_size;
-
 private:
 	friend class task;
 	friend class internal::worker;

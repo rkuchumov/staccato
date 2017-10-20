@@ -13,16 +13,14 @@ task_deque::task_deque(size_t log_size, size_t elem_size)
 	m_top = 1;
 	m_bottom = 1;
 
-	array_t *a = new array_t(log_size, elem_size);
+	auto a = new buffer(log_size, elem_size);
 
 	store_relaxed(m_array, a);
 }
 
 task_deque::~task_deque()
 {
-	array_t *a = load_relaxed(m_array);
-
-	delete []a->buffer;
+	auto a = load_relaxed(m_array);
 	delete a;
 }
 
@@ -31,9 +29,9 @@ uint8_t *task_deque::put_allocate()
 	size_t b = load_relaxed(m_bottom);
 	size_t t = load_acquire(m_top);
 
-	array_t *a = load_relaxed(m_array);
+	auto a = load_relaxed(m_array);
 
-	if (b - t > a->size_mask) {
+	if (b - t > a->mask) {
 		resize();
 		a = load_relaxed(m_array);
 	}
@@ -53,7 +51,7 @@ void task_deque::put_commit()
 uint8_t *task_deque::take(uint8_t *to)
 {
 	size_t b = dec_relaxed(m_bottom) - 1;
-	array_t *a = load_relaxed(m_array);
+	auto a = load_relaxed(m_array);
 	atomic_fence_seq_cst();
 	size_t t = load_relaxed(m_top);
 
@@ -87,7 +85,7 @@ uint8_t *task_deque::steal(uint8_t *to)
 	if (t >= b) // Deque is empty
 		return nullptr;
 
-	array_t *a = load_consume(m_array);
+	auto a = load_consume(m_array);
 
 	a->take(t, to);
 
@@ -100,9 +98,9 @@ uint8_t *task_deque::steal(uint8_t *to)
 
 void task_deque::resize()
 {
-	array_t *old = load_relaxed(m_array);
+	auto old = load_relaxed(m_array);
 
-	array_t *a = new array_t(old->log_size + 1, old->elem_size);
+	auto a = new buffer(old->log_size + 1, old->elem_size);
 
 	size_t t = load_relaxed(m_top);
 	size_t b = load_relaxed(m_bottom);
@@ -111,7 +109,6 @@ void task_deque::resize()
 
 	store_release(m_array, a);
 
-	delete []old->buffer;
 	delete old;
 }
 

@@ -10,16 +10,21 @@ namespace internal
 {
 
 worker::worker(size_t deque_log_size, size_t elem_size)
-: pool(deque_log_size, elem_size)
+: elem_size(elem_size)
+, task_stack_end(0)
+, pool(deque_log_size, elem_size)
 , handle(nullptr)
 , m_ready(false)
-{ }
+{
+	task_stack = new uint8_t[(1 << deque_log_size) * elem_size];
+}
 
 worker::~worker()
 {
-	if (handle) {
+	delete task_stack;
+
+	if (handle)
 		delete handle;
-	}
 }
 
 void worker::fork()
@@ -46,18 +51,21 @@ void worker::join()
 
 void worker::task_loop(uint8_t *waiting, uint8_t *t)
 {
-	auto current = task::stack_allocate();
-	// std::cerr << (void *) current << "\n";
+	auto c = task_stack + task_stack_end * elem_size;
+	task_stack_end++;
 
 	while (true) {
 		while (true) { // Local tasks loop
 			if (t)
-				task::process(t, this);
+				task::process(this, t);
 
 			if (waiting && task::has_finished(waiting))
+			{
+				task_stack_end--;
 				return;
+			}
 
-			t = pool.take(current);
+			t = pool.take(c);
 
 			if (!t)
 				break;
@@ -69,7 +77,7 @@ void worker::task_loop(uint8_t *waiting, uint8_t *t)
 
 		auto victim = scheduler::get_victim(this);
 
-		t = victim->pool.steal(current);
+		t = victim->pool.steal(c);
 	} 
 
 	ASSERT(false, "Must never get there");

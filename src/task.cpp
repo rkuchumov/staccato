@@ -10,20 +10,14 @@
 namespace staccato
 {
 
-size_t task::task_size;
-
 task::task()
-	: executer(nullptr)
-	, subtask_count(0)
-	, parent_subtask_count(nullptr)
-{
-
-}
+: executer(nullptr)
+, subtask_count(0)
+, parent_subtask_count(nullptr)
+{ }
 
 task::~task()
-{
-
-}
+{ }
 
 uint8_t *task::child()
 {
@@ -45,20 +39,17 @@ void task::spawn(task *t)
 	executer->pool.put_commit();
 }
 
-void task::process(uint8_t *raw, internal::worker *executer)
+void task::process(internal::worker *executer, uint8_t *raw)
 {
 	ASSERT(raw, "Processing nullptr");
-
 	auto t = reinterpret_cast<task *>(raw);
 
 	t->executer = executer;
 
 	t->execute();
 
-	ASSERT(
-		t->subtask_count == 0,
-		"Task still has subtaks after it has been executed"
-	);
+	ASSERT(t->subtask_count == 0,
+		"Task still has subtaks after it has been executed");
 
 	if (t->parent_subtask_count != nullptr)
 		dec_relaxed(*t->parent_subtask_count);
@@ -66,12 +57,12 @@ void task::process(uint8_t *raw, internal::worker *executer)
 
 void task::wait()
 {
-	ASSERT(executer != nullptr, "Executed by nullptr");
+	ASSERT(executer, "Executed by nullptr");
 
 	executer->task_loop(reinterpret_cast<uint8_t *>(this));
 
 	ASSERT(subtask_count == 0,
-		"Task still has subtaks after task_loop()");
+		"Task still have subtaks after task_loop()");
 }
 
 bool task::has_finished(uint8_t *raw)
@@ -80,12 +71,6 @@ bool task::has_finished(uint8_t *raw)
 	auto t = reinterpret_cast<task *>(raw);
 
 	return load_relaxed(t->subtask_count) == 0;
-}
-
-uint8_t *task::stack_allocate()
-{
-	return static_cast<uint8_t *> (std::malloc(task_size));
-	// return static_cast<uint8_t *> (alloca(task_size));
 }
 
 } /* staccato */ 

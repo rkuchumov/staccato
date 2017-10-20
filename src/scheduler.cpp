@@ -13,8 +13,6 @@ size_t scheduler::workers_count(0);
 std::atomic<scheduler::state_t> scheduler::state(terminated);
 // task *scheduler::root(nullptr);
 
-size_t scheduler::task_size = 8;
-
 scheduler::scheduler()
 { }
 
@@ -30,8 +28,6 @@ void scheduler::initialize(
 		state == state_t::terminated,
 		"Schdeler is already initialized"
 	);
-
-	task::task_size = task_size;
 
 	state = state_t::initializing;
 

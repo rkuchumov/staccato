@@ -14,24 +14,18 @@ public:
 	{ }
 
 	void execute() {
-		// cout << "n: " << n << "\n";
-
 		if (n <= 2) {
 			*sum = 1;
 			return;
 		}
 
-		long x = 0;
-		auto a = new(child()) FibTask(n - 1, &x);
-		spawn(a);
+		long x;
+		spawn(new(child()) FibTask(n - 1, &x));
 
 		long y;
-		auto b = new(child()) FibTask(n - 2, &y);
-		spawn(b);
+		spawn(new(child()) FibTask(n - 2, &y));
 
 		wait();
-
-		// cout << "x: " << x << " y: " << y << "\n";
 
 		*sum = x + y;
 
@@ -45,14 +39,14 @@ private:
 
 int main(int argc, char *argv[])
 {
-	unsigned n = 23;
+	unsigned n = 20;
 	long answer; 
 
 	if (argc == 2) {
 		n = atoi(argv[1]);
 	}
 
-	scheduler::initialize(sizeof(FibTask), 4);
+	scheduler::initialize(sizeof(FibTask));
 
 	FibTask root(n, &answer);
 
