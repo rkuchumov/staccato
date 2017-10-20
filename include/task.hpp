@@ -1,54 +1,53 @@
-#ifndef STACCATO_TASK_H
-#define STACCATO_TASK_H
+#ifndef TASK_META_HPP_34TJDRLS
+#define TASK_META_HPP_34TJDRLS
 
-#include <cstdlib>
 #include <atomic>
-#include <ostream>
+#include <cstdint>
+#include <functional>
+#include <cstdlib>
 
-#include "task_base.hpp"
 #include "constants.hpp"
 
 namespace staccato
 {
 
-class scheduler;
-
 namespace internal {
+class task_deque;
 class worker;
 }
 
-class task : public task_base<task>
-{
+class task {
 public:
 	task();
 	virtual ~task();
 
-	void spawn(task *t);
-	void wait();
+	static void process(uint8_t *task, internal::worker *executer);
 
-	void then(task *t);
+	static bool has_finished(uint8_t *task);
+
+	uint8_t *child();
+
+	void spawn(task *t);
+
+	void wait();
 
 	virtual void execute() = 0;
 
-	void *operator new(size_t sz);
+	static size_t task_size;
 
-	void operator delete(void *ptr) noexcept;
+	static uint8_t *stack_allocate();
 
-	static void process(uint8_t *t);
-	static bool has_finished(uint8_t *t);
-
-private:
-	friend class internal::worker;
-	friend class scheduler;
+// private:
+	// internal::task_deque *parent_pool;
 
 	internal::worker *executer;
 
 	std::atomic_size_t subtask_count;
 	std::atomic_size_t *parent_subtask_count;
-
-	task *next;
 };
 
-}
 
-#endif /* end of include guard: STACCATO_TASK_H */
+} /* staccato */ 
+
+
+#endif /* end of include guard: TASK_META_HPP_34TJDRLS */

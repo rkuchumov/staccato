@@ -4,11 +4,11 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 
-#include "task_meta.hpp"
+#include "task.hpp"
 
 using namespace ::testing;
 
-class task_mock: public staccato::task_meta
+class task_mock: public staccato::task
 {
 public:
 	task_mock(size_t id_) : id(id_)
@@ -18,7 +18,7 @@ public:
 
 	size_t id;
 
-	// MOCK_METHOD0(execute, void());
+	MOCK_METHOD0(execute, void());
 };
 
 #endif /* end of include guard: TASK_MOCK_HPP_FKQ408NU */

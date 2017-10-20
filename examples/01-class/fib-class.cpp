@@ -1,40 +1,39 @@
 #include <iostream>
 #include <atomic>
 
-#include <task_meta.hpp>
+#include <task.hpp>
 #include <scheduler.hpp>
 
 using namespace std;
 using namespace staccato;
 
-class FibTask: public task_meta
+class FibTask: public task
 {
 public:
 	FibTask (int n_, long *sum_): n(n_), sum(sum_)
 	{ }
 
-	static void execute(uint8_t *raw) {
-		auto task = reinterpret_cast<FibTask *>(raw);
-		if (task->n <= 2) {
-			*task->sum = 1;
+	void execute() {
+		// cout << "n: " << n << "\n";
+
+		if (n <= 2) {
+			*sum = 1;
 			return;
 		}
 
-		cout << "n: " <<  task->n << "\n";
+		long x = 0;
+		auto a = new(child()) FibTask(n - 1, &x);
+		spawn(a);
 
-		long x;
-		FibTask a(task->n - 1, &x);
-		cout << "sub: " <<  a.subtask_count << "\n";
+		long y;
+		auto b = new(child()) FibTask(n - 2, &y);
+		spawn(b);
 
-		task->spawn(reinterpret_cast<uint8_t *> (&a));
+		wait();
 
-		// long y;
-		// FibTask b(task->n - 2, &y);
-		// task->spawn(reinterpret_cast<uint8_t *> (&b));
+		// cout << "x: " << x << " y: " << y << "\n";
 
-		task->wait();
-
-		*task->sum = x ;
+		*sum = x + y;
 
 		return;
 	}
@@ -46,15 +45,14 @@ private:
 
 int main(int argc, char *argv[])
 {
-	unsigned n = 3;
+	unsigned n = 23;
 	long answer; 
 
 	if (argc == 2) {
 		n = atoi(argv[1]);
 	}
 
-
-	scheduler::initialize(sizeof(FibTask), FibTask::execute, 1);
+	scheduler::initialize(sizeof(FibTask), 4);
 
 	FibTask root(n, &answer);
 
@@ -62,7 +60,7 @@ int main(int argc, char *argv[])
 
 	scheduler::terminate();
 
-	// cout << "fib(" << n << ") = " << answer << "\n";
+	cout << "fib(" << n << ") = " << answer << "\n";
 
 	return 0;
 }

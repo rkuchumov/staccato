@@ -1,7 +1,7 @@
 #include "utils.hpp"
 #include "scheduler.hpp"
 #include "worker.hpp"
-#include "task_meta.hpp"
+#include "task.hpp"
 
 
 namespace staccato
@@ -23,7 +23,6 @@ scheduler::~scheduler()
 
 void scheduler::initialize(
 	size_t task_size,
-	std::function<void(uint8_t*)> task_handle,
 	size_t nthreads,
 	size_t deque_log_size)
 {
@@ -32,8 +31,7 @@ void scheduler::initialize(
 		"Schdeler is already initialized"
 	);
 
-	task_meta::task_size = task_size;
-	task_meta::handler = task_handle;
+	task::task_size = task_size;
 
 	state = state_t::initializing;
 

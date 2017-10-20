@@ -1,6 +1,6 @@
 #include "utils.hpp"
 #include "worker.hpp"
-#include "task_meta.hpp"
+#include "task.hpp"
 #include "scheduler.hpp"
 #include "constants.hpp"
 
@@ -46,14 +46,15 @@ void worker::join()
 
 void worker::task_loop(uint8_t *waiting, uint8_t *t)
 {
-	auto current = task_meta::stack_allocate();
+	auto current = task::stack_allocate();
+	// std::cerr << (void *) current << "\n";
 
 	while (true) {
 		while (true) { // Local tasks loop
 			if (t)
-				task_meta::process(t, this);
+				task::process(t, this);
 
-			if (waiting && task_meta::has_finished(waiting))
+			if (waiting && task::has_finished(waiting))
 				return;
 
 			t = pool.take(current);

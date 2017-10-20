@@ -1,50 +1,58 @@
-#include "utils.hpp"
+#include <iostream>
+#include <cstring>
+
+#include <alloca.h>
+
+#include "task_deque.hpp"
 #include "task.hpp"
-#include "scheduler.hpp"
 #include "worker.hpp"
 
 namespace staccato
 {
 
+size_t task::task_size;
+
 task::task()
-: executer(nullptr)
-, subtask_count(0)
-, parent_subtask_count(nullptr)
-, next(nullptr)
-{ }
+	: executer(nullptr)
+	, subtask_count(0)
+	, parent_subtask_count(nullptr)
+{
+
+}
 
 task::~task()
-{ }
+{
+
+}
+
+uint8_t *task::child()
+{
+	ASSERT(executer != nullptr, "Executed by nullptr");
+	return executer->pool.put_allocate();
+}
 
 void task::spawn(task *t)
 {
 	ASSERT(t->subtask_count == 0,
 		"Spawned task is not allowed to have subtasks");
-
-	t->parent_subtask_count = &subtask_count;
+	ASSERT(child() == reinterpret_cast<uint8_t *> (t),
+		"task::spawn() must be called after allocation");
 
 	inc_relaxed(subtask_count);
 
-	ASSERT(executer != nullptr, "Executed by nullptr");
+	t->parent_subtask_count = &subtask_count;
 
-	executer->pool.put(t);
+	executer->pool.put_commit();
 }
 
-void task::wait()
+void task::process(uint8_t *raw, internal::worker *executer)
 {
-	ASSERT(executer != nullptr, "Executed by nullptr");
+	ASSERT(raw, "Processing nullptr");
 
-	executer->task_loop(this);
+	auto t = reinterpret_cast<task *>(raw);
 
-	ASSERT(subtask_count == 0,
-		"Task still has subtaks after task_loop()");
-}
+	t->executer = executer;
 
-void task::process(uint8_t *t)
-{
-	ASSERT(t, "Processing nullptr");
-
-	t->executer = this;
 	t->execute();
 
 	ASSERT(
@@ -56,27 +64,28 @@ void task::process(uint8_t *t)
 		dec_relaxed(*t->parent_subtask_count);
 }
 
-bool task::has_finished(uint8_t *t)
+void task::wait()
 {
-	ASSERT(t, "Processing nullptr");
+	ASSERT(executer != nullptr, "Executed by nullptr");
 
-	return (load_relaxed(waiting->subtask_count) == 0);
+	executer->task_loop(reinterpret_cast<uint8_t *>(this));
+
+	ASSERT(subtask_count == 0,
+		"Task still has subtaks after task_loop()");
 }
 
-void task::then(task *t)
+bool task::has_finished(uint8_t *raw)
 {
-	// TODO: append to next
-	next = t;
+	ASSERT(raw, "Processing nullptr");
+	auto t = reinterpret_cast<task *>(raw);
+
+	return load_relaxed(t->subtask_count) == 0;
 }
 
-void *task::operator new(size_t sz)
+uint8_t *task::stack_allocate()
 {
-	return std::malloc(sz);
+	return static_cast<uint8_t *> (std::malloc(task_size));
+	// return static_cast<uint8_t *> (alloca(task_size));
 }
 
-void task::operator delete(void *ptr) noexcept
-{
-	std::free(ptr);
-}
-
-} // namespace stacccato
+} /* staccato */ 

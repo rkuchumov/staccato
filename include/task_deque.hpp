@@ -36,7 +36,7 @@ private:
 			buffer = new uint8_t[elem_size * (size_mask + 1)];
 		}
 
-		const size_t log_size; // = (2^log_size) - 1
+		const size_t log_size;
 		const size_t size_mask; // = (2^log_size) - 1
 		const size_t elem_size;
 		uint8_t *buffer;

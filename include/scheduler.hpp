@@ -23,7 +23,6 @@ class scheduler
 public:
 	static void initialize(
 		size_t task_size,
-		std::function<void(uint8_t*)> task_handle,
 		size_t nthreads = 0,
 		size_t deque_log_size = 7
 	);
