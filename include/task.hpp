@@ -5,6 +5,7 @@
 #include <atomic>
 #include <ostream>
 
+#include "task_base.hpp"
 #include "constants.hpp"
 
 namespace staccato
@@ -16,7 +17,7 @@ namespace internal {
 class worker;
 }
 
-class task
+class task : public task_base<task>
 {
 public:
 	task();
@@ -32,6 +33,9 @@ public:
 	void *operator new(size_t sz);
 
 	void operator delete(void *ptr) noexcept;
+
+	static void process(uint8_t *t);
+	static bool has_finished(uint8_t *t);
 
 private:
 	friend class internal::worker;

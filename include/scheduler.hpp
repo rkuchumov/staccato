@@ -21,16 +21,25 @@ class worker;
 class scheduler
 {
 public:
-	static void initialize(size_t nthreads = 0, size_t deque_log_size = 7);
+	static void initialize(
+		size_t task_size,
+		std::function<void(uint8_t*)> task_handle,
+		size_t nthreads = 0,
+		size_t deque_log_size = 7
+	);
+
 	static void terminate();
 
-	static void spawn_and_wait(task *t);
-
-	static void spawn(task *t);
-
-	static void spawn(std::function <void()> fn);
+	// static void spawn_and_wait(task *t);
+    //
+	// static void spawn(task *t);
+    //
+	// static void spawn(std::function <void()> fn);
+	static void spawn_and_wait(uint8_t *t);
 
 	static void wait();
+
+	static size_t task_size;
 
 private:
 	friend class task;
@@ -47,7 +56,7 @@ private:
 	};
 	static std::atomic<state_t> state;
 
-	static task *root;
+	// static task *root;
 
 	static void wait_workers_fork();
 

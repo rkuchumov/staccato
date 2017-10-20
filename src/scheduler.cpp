@@ -1,10 +1,8 @@
 #include "utils.hpp"
 #include "scheduler.hpp"
 #include "worker.hpp"
+#include "task_meta.hpp"
 
-#include "task.hpp"
-#include "root_task.hpp"
-#include "lambda_task.hpp"
 
 namespace staccato
 {
@@ -13,7 +11,9 @@ using namespace internal;
 worker **scheduler::workers;
 size_t scheduler::workers_count(0);
 std::atomic<scheduler::state_t> scheduler::state(terminated);
-task *scheduler::root(nullptr);
+// task *scheduler::root(nullptr);
+
+size_t scheduler::task_size = 8;
 
 scheduler::scheduler()
 { }
@@ -21,12 +21,19 @@ scheduler::scheduler()
 scheduler::~scheduler()
 { }
 
-void scheduler::initialize(size_t nthreads, size_t deque_log_size)
+void scheduler::initialize(
+	size_t task_size,
+	std::function<void(uint8_t*)> task_handle,
+	size_t nthreads,
+	size_t deque_log_size)
 {
 	ASSERT(
 		state == state_t::terminated,
 		"Schdeler is already initialized"
 	);
+
+	task_meta::task_size = task_size;
+	task_meta::handler = task_handle;
 
 	state = state_t::initializing;
 
@@ -36,15 +43,15 @@ void scheduler::initialize(size_t nthreads, size_t deque_log_size)
 
 	workers = new worker *[workers_count];
 	for (size_t i = 0; i < workers_count; ++i)
-		workers[i] = new worker(deque_log_size);
+		workers[i] = new worker(deque_log_size, task_size);
 
 	for (size_t i = 1; i < workers_count; ++i)
 		workers[i]->fork();
 
 	wait_workers_fork();
 
-	root = new root_task();
-	root->executer = workers[0];
+	// root = new root_task();
+	// root->executer = workers[0];
 
 	state = state_t::initialized;
 }
@@ -96,25 +103,25 @@ void scheduler::terminate()
 	state = terminated;
 }
 
-void scheduler::spawn(task *t)
-{
-	ASSERT(root, "Root task is not initialized");
-	root->spawn(t);
-}
-
-void scheduler::spawn(std::function<void ()> fn)
-{
-	task *t = new lambda_task(fn);
-	spawn(t);
-}
-
-void scheduler::wait()
-{
-	ASSERT(root, "Root task is not initialized");
-	root->wait();
-}
-
-void scheduler::spawn_and_wait(task *t)
+// void scheduler::spawn(task *t)
+// {
+// 	ASSERT(root, "Root task is not initialized");
+// 	root->spawn(t);
+// }
+//
+// void scheduler::spawn(std::function<void ()> fn)
+// {
+// 	task *t = new lambda_task(fn);
+// 	spawn(t);
+// }
+//
+// void scheduler::wait()
+// {
+// 	ASSERT(root, "Root task is not initialized");
+// 	root->wait();
+// }
+//
+void scheduler::spawn_and_wait(uint8_t *t)
 {
 	ASSERT(workers, "Task Pool is not initialized");
 	ASSERT(workers[0], "Task Pool is not initialized");

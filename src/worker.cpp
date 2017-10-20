@@ -1,6 +1,6 @@
 #include "utils.hpp"
 #include "worker.hpp"
-#include "task.hpp"
+#include "task_meta.hpp"
 #include "scheduler.hpp"
 #include "constants.hpp"
 
@@ -9,13 +9,11 @@ namespace staccato
 namespace internal
 {
 
-worker::worker(size_t deque_log_size)
-: pool(deque_log_size)
+worker::worker(size_t deque_log_size, size_t elem_size)
+: pool(deque_log_size, elem_size)
 , handle(nullptr)
 , m_ready(false)
-{
-
-}
+{ }
 
 worker::~worker()
 {
@@ -46,44 +44,31 @@ void worker::join()
 	handle->join();
 }
 
-void worker::task_loop(task *waiting, task *t)
+void worker::task_loop(uint8_t *waiting, uint8_t *t)
 {
+	auto current = task_meta::stack_allocate();
+
 	while (true) {
 		while (true) { // Local tasks loop
-			if (t) {
-				for (auto s = t; s; s = s->next) {
-					s->executer = this;
-					s->execute();
-				}
+			if (t)
+				task_meta::process(t, this);
 
-				ASSERT(
-					t->subtask_count == 0,
-					"Task still has subtaks after it has been executed"
-				);
-
-				if (t->parent_subtask_count != nullptr)
-					dec_relaxed(*t->parent_subtask_count);
-			}
-
-			if (waiting != nullptr && load_relaxed(waiting->subtask_count) == 0)
+			if (waiting && task_meta::has_finished(waiting))
 				return;
 
-			t = pool.take();
+			t = pool.take(current);
 
-			if (!t) {
+			if (!t)
 				break;
-			}
-		} 
+		}
 
 		auto state = load_relaxed(scheduler::state);
-		if (state == scheduler::terminating) {
-			Debug() << "Worker exiting (empty queue, scheduler is terminated)";
+		if (state == scheduler::terminating)
 			return;
-		}
 
 		auto victim = scheduler::get_victim(this);
 
-		t = victim->pool.steal();
+		t = victim->pool.steal(current);
 	} 
 
 	ASSERT(false, "Must never get there");

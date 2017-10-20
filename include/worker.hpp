@@ -10,30 +10,27 @@
 namespace staccato
 {
 
-class task;
-
 namespace internal
 {
 
 class worker
 {
 public:
-	worker(size_t deque_log_size);
+	worker(size_t deque_log_size, size_t elem_size);
 	~worker();
 
 	void fork();
 	void join();
 
-	void task_loop(task *parent = nullptr, task *t = nullptr);
-
-	task_deque pool;
+	void task_loop(uint8_t *parent = nullptr, uint8_t *t = nullptr);
 
 	bool ready() const;
 
-private:
+	task_deque pool;
+// private:
+
 	std::thread *handle;
 	std::atomic_bool m_ready;
-
 };
 
 }

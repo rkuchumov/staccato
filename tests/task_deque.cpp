@@ -18,7 +18,7 @@ static const size_t test_timeout = 2;
 static const size_t nthreads = 4;
 
 TEST(ctor, creating_and_deleteing) {
-	auto d = new task_deque(4);
+	auto d = new task_deque(4, 8);
 	delete d;
 }
 
@@ -26,23 +26,17 @@ TEST(take, without_resize) {
 	size_t size = 5;
 	size_t ntasks = 1 << (size - 1);
 
-	auto deque = new task_deque(size);
+	auto deque = new task_deque(size, sizeof(task_mock));
 
-	std::vector<task *> tasks;
-
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t = new task_mock();
-		tasks.push_back(t);
-		deque->put(t);
+	for (size_t i = 1; i <= ntasks; ++i) {
+		new(deque->put_allocate()) task_mock(i);
+		deque->put_commit();
 	}
 
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t1 = deque->take();
-		auto t2 = tasks.back();
-		ASSERT_EQ(t1, t2);
-		tasks.pop_back();
-
-		delete t1;
+	task_mock t(10000);
+	for (size_t i = ntasks; i >= 1; --i) {
+		deque->take(reinterpret_cast<uint8_t *> (&t));
+		EXPECT_EQ(t.id, i);
 	}
 
 	delete deque;
@@ -52,23 +46,17 @@ TEST(take, with_resize) {
 	size_t size = 5;
 	size_t ntasks = 1 << (size + 2);
 
-	auto deque = new task_deque(size);
+	auto deque = new task_deque(size, sizeof(task_mock));
 
-	std::vector<task *> tasks;
-
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t = new task_mock();
-		tasks.push_back(t);
-		deque->put(t);
+	for (size_t i = 1; i <= ntasks; ++i) {
+		new(deque->put_allocate()) task_mock(i);
+		deque->put_commit();
 	}
 
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t1 = deque->take();
-		auto t2 = tasks.back();
-		ASSERT_EQ(t1, t2);
-		tasks.pop_back();
-
-		delete t1;
+	task_mock t(10000);
+	for (size_t i = ntasks; i >= 1; --i) {
+		deque->take(reinterpret_cast<uint8_t *> (&t));
+		EXPECT_EQ(t.id, i);
 	}
 
 	delete deque;
@@ -78,24 +66,17 @@ TEST(steal, sequential) {
 	size_t size = 5;
 	size_t ntasks = 1 << (size + 2);
 
-	auto deque = new task_deque(size);
+	auto deque = new task_deque(size, sizeof(task_mock));
 
-	std::vector<task *> tasks;
-
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t = new task_mock();
-		tasks.push_back(t);
-		deque->put(t);
+	for (size_t i = 1; i <= ntasks; ++i) {
+		new(deque->put_allocate()) task_mock(i);
+		deque->put_commit();
 	}
 
-	std::reverse(tasks.begin(), tasks.end());
-
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t1 = deque->steal();
-		auto t2 = tasks.back();
-		ASSERT_EQ(t1, t2);
-		tasks.pop_back();
-		delete t1;
+	task_mock t(10000);
+	for (size_t i = 1; i <= ntasks; ++i) {
+		deque->steal(reinterpret_cast<uint8_t *> (&t));
+		EXPECT_EQ(t.id, i);
 	}
 
 	delete deque;
@@ -105,19 +86,19 @@ TEST(steal, concurrent_steal) {
 	size_t size = 12;
 	size_t ntasks = 1 << (size + 2);
 
-	auto deque = new task_deque(size);
+	std::vector<size_t> tasks;
 
-	std::vector<task *> tasks;
+	auto deque = new task_deque(size, sizeof(task_mock));
 
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t = new task_mock();
-		tasks.push_back(t);
-		deque->put(t);
+	for (size_t i = 1; i <= ntasks; ++i) {
+		new(deque->put_allocate()) task_mock(i);
+		deque->put_commit();
+		tasks.push_back(i);
 	}
 
 	std::atomic_size_t nready(0);
 	std::atomic_bool stop(false);
-	std::vector<task *> stolen[nthreads];
+	std::vector<size_t > stolen[nthreads];
 	std::thread threads[nthreads];
 
 	auto steal = [&](size_t id) {
@@ -126,10 +107,11 @@ TEST(steal, concurrent_steal) {
 		while (nready != nthreads)
 			std::this_thread::yield();
 
+		task_mock mem(10000);
 		while (!stop) {
-			auto t = deque->steal();
+			auto t = deque->steal(reinterpret_cast<uint8_t *> (&mem));
 			if (t)
-				stolen[id].push_back(t);
+				stolen[id].push_back(mem.id);
 		}
 	};
 
@@ -151,8 +133,6 @@ TEST(steal, concurrent_steal) {
 			auto found = std::find(tasks.begin(), tasks.end(), t);
 			ASSERT_TRUE(found != tasks.end());
 			tasks.erase(found);
-
-			delete t;
 		}
 	}
 
@@ -165,20 +145,21 @@ TEST(steal_take, concurrent_steal_and_take) {
 	size_t size = 12;
 	size_t ntasks = 1 << (size + 2);
 
-	auto deque = new task_deque(size);
+	auto deque = new task_deque(size, sizeof(task_mock));
 
-	std::vector<task *> tasks;
+	std::vector<size_t> tasks;
 
-	for (size_t i = 0; i < ntasks; ++i) {
-		auto t = new task_mock();
-		tasks.push_back(t);
-		deque->put(t);
+	for (size_t i = 1; i <= ntasks; ++i) {
+		new(deque->put_allocate()) task_mock(i);
+		deque->put_commit();
+		tasks.push_back(i);
 	}
+
 
 	std::atomic_size_t nready(0);
 	std::atomic_bool stop(false);
-	std::vector<task *> stolen[nthreads];
-	std::vector<task *> taken;
+	std::vector<size_t> stolen[nthreads];
+	std::vector<size_t> taken;
 	std::thread threads[nthreads];
 
 	auto steal = [&](size_t id, bool steal) {
@@ -187,10 +168,12 @@ TEST(steal_take, concurrent_steal_and_take) {
 		while (nready != nthreads)
 			std::this_thread::yield();
 
+		task_mock mem(10000);
+		auto ptr = reinterpret_cast<uint8_t *> (&mem);
 		while (!stop) {
-			auto t = steal ? deque->steal() : deque->take();
+			auto t = steal ? deque->steal(ptr) : deque->take(ptr);
 			if (t)
-				stolen[id].push_back(t);
+				stolen[id].push_back(mem.id);
 		}
 	};
 
@@ -212,8 +195,6 @@ TEST(steal_take, concurrent_steal_and_take) {
 			auto found = std::find(tasks.begin(), tasks.end(), t);
 			ASSERT_TRUE(found != tasks.end());
 			tasks.erase(found);
-
-			delete t;
 		}
 	}
 
@@ -227,16 +208,15 @@ TEST(put_steal_take, concurrent_steal_take_and_put) {
 	size_t size = 12;
 	size_t ntasks = 1 << (size + 2);
 
-	auto deque = new task_deque(size);
-
-	std::vector<task *> tasks;
+	std::vector<size_t> tasks;
+	auto deque = new task_deque(size, sizeof(task_mock));
 
 	std::atomic_size_t nready(0);
 	std::atomic_bool stop(false);
 	std::atomic_size_t tasks_left(ntasks);
 
-	std::vector<task *> stolen[nthreads];
-	std::vector<task *> taken;
+	std::vector<size_t> stolen[nthreads];
+	std::vector<size_t> taken;
 	std::thread threads[nthreads];
 
 	auto steal = [&](size_t id, bool steal) {
@@ -246,21 +226,25 @@ TEST(put_steal_take, concurrent_steal_take_and_put) {
 			std::this_thread::yield();
 
 		while (!stop) {
+
+			task_mock mem(10000);
+			auto ptr = reinterpret_cast<uint8_t *> (&mem);
+
 			if (steal) {
-				auto t = deque->steal();
+				auto t = deque->steal(ptr);
 				if (t)
-					stolen[id].push_back(t);
+					stolen[id].push_back(mem.id);
 			} else {
 				if (tasks_left > 0) {
-					auto new_task = new task_mock();
-					tasks.push_back(new_task);
-					deque->put(new_task);
+					new(deque->put_allocate()) task_mock(tasks_left);
+					deque->put_commit();
+					tasks.push_back(tasks_left);
 					tasks_left--;
 				}
 
-				auto t = deque->take();
+				auto t = deque->take(ptr);
 				if (t)
-					stolen[id].push_back(t);
+					stolen[id].push_back(mem.id);
 			}
 		}
 	};
@@ -283,8 +267,6 @@ TEST(put_steal_take, concurrent_steal_take_and_put) {
 			auto found = std::find(tasks.begin(), tasks.end(), t);
 			ASSERT_TRUE(found != tasks.end());
 			tasks.erase(found);
-
-			delete t;
 		}
 	}
 

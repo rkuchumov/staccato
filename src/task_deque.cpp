@@ -1,23 +1,19 @@
 #include "utils.hpp"
 #include "task_deque.hpp"
-#include "task.hpp"
-// #include "statistics.h"
 
 namespace staccato
 {
 namespace internal
 {
 
-task_deque::task_deque(size_t log_size)
+task_deque::task_deque(size_t log_size, size_t elem_size)
 {
 	ASSERT(log_size > 0 && log_size < 32, "Incorrect deque size.");
 
 	m_top = 1;
 	m_bottom = 1;
 
-	array_t *a = new array_t;
-	a->size_mask = (1 << log_size) - 1;
-	a->buffer = new atomic_task[a->size_mask + 1];
+	array_t *a = new array_t(log_size, elem_size);
 
 	store_relaxed(m_array, a);
 }
@@ -30,7 +26,7 @@ task_deque::~task_deque()
 	delete a;
 }
 
-void task_deque::put(task *new_task)
+uint8_t *task_deque::put_allocate()
 {
 	size_t b = load_relaxed(m_bottom);
 	size_t t = load_acquire(m_top);
@@ -42,14 +38,19 @@ void task_deque::put(task *new_task)
 		a = load_relaxed(m_array);
 	}
 
-	store_relaxed(a->buffer[b & a->size_mask], new_task);
+	return a->at(b);
+}
+
+void task_deque::put_commit()
+{
+	size_t b = load_relaxed(m_bottom);
 
 	atomic_fence_release();
 
 	store_relaxed(m_bottom, b + 1);
 }
 
-task *task_deque::take()
+uint8_t *task_deque::take(uint8_t *to)
 {
 	size_t b = dec_relaxed(m_bottom) - 1;
 	array_t *a = load_relaxed(m_array);
@@ -62,7 +63,7 @@ task *task_deque::take()
 		return nullptr;
 	}
 
-	task *r = load_relaxed(a->buffer[b & a->size_mask]);
+	a->take(b, to);
 
 	if (t == b) {
 		// Check if they are not stollen
@@ -74,44 +75,39 @@ task *task_deque::take()
 		m_bottom = b + 1;
 	}
 
-	return r;
+	return to;
 }
 
-task *task_deque::steal()
+uint8_t *task_deque::steal(uint8_t *to)
 {
 	size_t t = load_acquire(m_top);
 	atomic_fence_seq_cst();
 	size_t b = load_acquire(m_bottom);
 
-	if (t >= b) { 
+	if (t >= b) // Deque is empty
 		return nullptr;
-	}// Deque is empty
 
 	array_t *a = load_consume(m_array);
 
-	task *r = load_relaxed(a->buffer[t & a->size_mask]);
+	a->take(t, to);
 
 	// Victim doesn't have required amount of tasks
 	if (!cas_weak(m_top, t, t + 1))
 		return nullptr;
 
-	return r;
+	return to;
 }
 
 void task_deque::resize()
 {
 	array_t *old = load_relaxed(m_array);
 
-	array_t *a = new array_t;
-	a->size_mask = (old->size_mask << 1) | 1;
-	a->buffer = new atomic_task[a->size_mask + 1];
+	array_t *a = new array_t(old->log_size + 1, old->elem_size);
 
 	size_t t = load_relaxed(m_top);
 	size_t b = load_relaxed(m_bottom);
-	for (size_t i = t; i < b; i++) {
-		task *item = load_relaxed(old->buffer[i & old->size_mask]);
-		store_relaxed(a->buffer[i & a->size_mask], item);
-	}
+	for (size_t i = t; i < b; i++)
+		a->put(i, old->at(i));
 
 	store_release(m_array, a);
 

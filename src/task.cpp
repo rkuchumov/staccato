@@ -40,6 +40,29 @@ void task::wait()
 		"Task still has subtaks after task_loop()");
 }
 
+void task::process(uint8_t *t)
+{
+	ASSERT(t, "Processing nullptr");
+
+	t->executer = this;
+	t->execute();
+
+	ASSERT(
+		t->subtask_count == 0,
+		"Task still has subtaks after it has been executed"
+	);
+
+	if (t->parent_subtask_count != nullptr)
+		dec_relaxed(*t->parent_subtask_count);
+}
+
+bool task::has_finished(uint8_t *t)
+{
+	ASSERT(t, "Processing nullptr");
+
+	return (load_relaxed(waiting->subtask_count) == 0);
+}
+
 void task::then(task *t)
 {
 	// TODO: append to next
