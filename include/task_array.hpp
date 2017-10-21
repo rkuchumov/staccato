@@ -1,5 +1,5 @@
-#ifndef BUFFER_HPP_9RO0BFAQ
-#define BUFFER_HPP_9RO0BFAQ
+#ifndef TASK_ARRAY_HPP_ZQH1IMCH
+#define TASK_ARRAY_HPP_ZQH1IMCH
 
 #include <cstdlib>
 #include <cstdint>
@@ -10,9 +10,9 @@ namespace staccato
 namespace internal
 {
 
-class buffer {
+class task_array {
 public:
-	buffer(size_t log_size, size_t elem_size)
+	task_array(size_t log_size, size_t elem_size)
 	: log_size(log_size)
 	, mask((1 << log_size) - 1)
 	, elem_size(elem_size)
@@ -20,8 +20,7 @@ public:
 		memory = new uint8_t[elem_size * (mask + 1)];
 	}
 
-	virtual ~buffer()
-	{
+	virtual ~task_array() {
 		delete memory;
 	}
 
@@ -49,4 +48,4 @@ private:
 	
 } /* staccato */ 
 
-#endif /* end of include guard: BUFFER_HPP_9RO0BFAQ */
+#endif /* end of include guard: TASK_ARRAY_HPP_ZQH1IMCH */

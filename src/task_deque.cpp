@@ -13,7 +13,7 @@ task_deque::task_deque(size_t log_size, size_t elem_size)
 	m_top = 1;
 	m_bottom = 1;
 
-	auto a = new buffer(log_size, elem_size);
+	auto a = new task_array(log_size, elem_size);
 
 	store_relaxed(m_array, a);
 }
@@ -100,7 +100,7 @@ void task_deque::resize()
 {
 	auto old = load_relaxed(m_array);
 
-	auto a = new buffer(old->log_size + 1, old->elem_size);
+	auto a = new task_array(old->log_size + 1, old->elem_size);
 
 	size_t t = load_relaxed(m_top);
 	size_t b = load_relaxed(m_bottom);

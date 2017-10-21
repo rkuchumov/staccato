@@ -22,7 +22,7 @@ task::~task()
 uint8_t *task::child()
 {
 	ASSERT(executer != nullptr, "Executed by nullptr");
-	return executer->pool.put_allocate();
+	return executer->put_allocate();
 }
 
 void task::spawn(task *t)
@@ -36,7 +36,7 @@ void task::spawn(task *t)
 
 	t->parent_subtask_count = &subtask_count;
 
-	executer->pool.put_commit();
+	executer->put_commit();
 }
 
 void task::process(internal::worker *executer, uint8_t *raw)

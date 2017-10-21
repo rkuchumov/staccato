@@ -6,7 +6,7 @@
 #include <cstring>
 
 #include "constants.hpp"
-#include "buffer.hpp"
+#include "task_array.hpp"
 
 namespace staccato
 {
@@ -31,7 +31,7 @@ private:
 
 	STACCATO_ALIGN std::atomic_size_t m_bottom;
 
-	STACCATO_ALIGN std::atomic<buffer *> m_array;
+	STACCATO_ALIGN std::atomic<task_array *> m_array;
 
 	void resize();
 };

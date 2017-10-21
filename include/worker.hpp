@@ -5,6 +5,7 @@
 #include <thread>
 
 #include "task_deque.hpp"
+#include "task_stack.hpp"
 #include "constants.hpp"
 
 namespace staccato
@@ -28,13 +29,16 @@ public:
 
 	const size_t elem_size;
 
-	uint8_t *task_stack;
-	size_t task_stack_end;
+	uint8_t *put_allocate();
+	void put_commit();
 
-	task_deque pool;
-
+private:
 	std::thread *handle;
 	std::atomic_bool m_ready;
+
+	task_deque deque;
+
+	task_stack stack;
 };
 
 }
