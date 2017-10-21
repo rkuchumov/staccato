@@ -6,6 +6,7 @@
 #include <atomic>
 #include <functional>
 
+#include "lambda_task.hpp"
 #include "constants.hpp"
 
 namespace staccato
@@ -22,19 +23,18 @@ class scheduler
 {
 public:
 	static void initialize(
-		size_t task_size,
+		size_t task_size = sizeof(internal::lambda_task),
 		size_t nthreads = 0,
 		size_t deque_log_size = 7
 	);
 
 	static void terminate();
 
-	// static void spawn_and_wait(task *t);
-    //
-	// static void spawn(task *t);
-    //
-	// static void spawn(std::function <void()> fn);
-	static void spawn_and_wait(uint8_t *t);
+	static uint8_t *root();
+
+	static void spawn(task *t);
+
+	static void spawn(std::function <void()> fn);
 
 	static void wait();
 
@@ -53,7 +53,7 @@ private:
 	};
 	static std::atomic<state_t> state;
 
-	// static task *root;
+	static task *m_root;
 
 	static void wait_workers_fork();
 

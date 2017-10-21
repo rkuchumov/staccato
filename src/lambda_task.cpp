@@ -16,11 +16,8 @@ lambda_task::~lambda_task()
 
 void lambda_task::execute()
 {
-	if (!m_fn)
-		return;
-
-	m_fn();
-	delete this;
+	if (m_fn)
+		m_fn();
 }
 
 } /* internal */ 

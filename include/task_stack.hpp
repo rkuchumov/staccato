@@ -15,10 +15,10 @@ class task_stack
 public:
 	task_stack(size_t log_size, size_t elem_size)
 	: elem_size(elem_size)
-	, size(1 << log_size)
+	, size((1 << log_size) * elem_size)
 	, offset(0)
 	{
-		memory = new uint8_t[elem_size * size];
+		memory = new uint8_t[size];
 	}
 
 	virtual ~task_stack() {
@@ -29,11 +29,13 @@ public:
 		if (offset >= size)
 			grow();
 
-		return memory + elem_size * offset++;
+		auto t = memory + offset;
+		offset += elem_size;
+		return t;
 	}
 
 	inline void deallocate() {
-		offset--;
+		offset -= elem_size;
 	}
 
 	const size_t elem_size;

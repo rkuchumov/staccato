@@ -11,6 +11,8 @@
 namespace staccato
 {
 
+class scheduler;
+
 namespace internal {
 class worker;
 }
@@ -29,6 +31,7 @@ public:
 	void wait();
 
 private:
+	friend class scheduler;
 	friend class internal::worker;
 
 	static void process(internal::worker *executer, uint8_t *raw);

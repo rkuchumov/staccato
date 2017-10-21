@@ -30,6 +30,8 @@ set(sources
 	"src/scheduler.cpp"
 	"src/task.cpp"
 	"src/task_deque.cpp"
+	"src/root_task.cpp"
+	"src/lambda_task.cpp"
 	"src/worker.cpp"
 )
 
@@ -57,6 +59,7 @@ install(
 # endif()
 
 	add_subdirectory(examples/01-class)
+	add_subdirectory(examples/02-lambda)
 if (STACCATO_BUILD_TESTS OR STACCATO_BUILD_EXAMPLES)
 	add_subdirectory(examples/02-lambda)
 endif()

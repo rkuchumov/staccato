@@ -48,9 +48,8 @@ int main(int argc, char *argv[])
 
 	scheduler::initialize(sizeof(FibTask));
 
-	FibTask root(n, &answer);
-
-	scheduler::spawn_and_wait(reinterpret_cast<uint8_t *> (&root));
+	scheduler::spawn(new(scheduler::root()) FibTask(n, &answer));
+	scheduler::wait();
 
 	scheduler::terminate();
 

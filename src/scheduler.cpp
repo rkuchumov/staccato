@@ -2,6 +2,8 @@
 #include "scheduler.hpp"
 #include "worker.hpp"
 #include "task.hpp"
+#include "root_task.hpp"
+#include "lambda_task.hpp"
 
 
 namespace staccato
@@ -11,7 +13,7 @@ using namespace internal;
 worker **scheduler::workers;
 size_t scheduler::workers_count(0);
 std::atomic<scheduler::state_t> scheduler::state(terminated);
-// task *scheduler::root(nullptr);
+task *scheduler::m_root(nullptr);
 
 scheduler::scheduler()
 { }
@@ -29,6 +31,9 @@ void scheduler::initialize(
 		"Schdeler is already initialized"
 	);
 
+	ASSERT(task_size >= sizeof(root_task),
+		"The of a task is too small");
+
 	state = state_t::initializing;
 
 	if (nthreads == 0)
@@ -44,8 +49,8 @@ void scheduler::initialize(
 
 	wait_workers_fork();
 
-	// root = new root_task();
-	// root->executer = workers[0];
+	m_root = new root_task();
+	m_root->executer = workers[0];
 
 	state = state_t::initialized;
 }
@@ -97,30 +102,28 @@ void scheduler::terminate()
 	state = terminated;
 }
 
-// void scheduler::spawn(task *t)
-// {
-// 	ASSERT(root, "Root task is not initialized");
-// 	root->spawn(t);
-// }
-//
-// void scheduler::spawn(std::function<void ()> fn)
-// {
-// 	task *t = new lambda_task(fn);
-// 	spawn(t);
-// }
-//
-// void scheduler::wait()
-// {
-// 	ASSERT(root, "Root task is not initialized");
-// 	root->wait();
-// }
-//
-void scheduler::spawn_and_wait(uint8_t *t)
+uint8_t *scheduler::root()
 {
-	ASSERT(workers, "Task Pool is not initialized");
-	ASSERT(workers[0], "Task Pool is not initialized");
+	ASSERT(m_root, "Root task is not allocated");
+	return m_root->child();
+}
 
-	workers[0]->task_loop(t, t);
+void scheduler::spawn(task *t)
+{
+	ASSERT(m_root, "Root task is not allocated");
+	m_root->spawn(t);
+}
+
+void scheduler::spawn(std::function<void ()> fn)
+{
+	ASSERT(m_root, "Root task is not allocated");
+	m_root->spawn(new(m_root->child()) lambda_task(fn));
+}
+
+void scheduler::wait()
+{
+	ASSERT(m_root, "Root task is not initialized");
+	m_root->wait();
 }
 
 worker *scheduler::get_victim(worker *thief)
