@@ -17,9 +17,7 @@ public:
 		: depth(depth_)
 		, breadth(breadth_)
 		, sum(sum_)
-	{ 
-		*sum = 0;
-	}
+	{ }
 
 	task *execute() {
 		if (depth == 0) {
@@ -36,6 +34,7 @@ public:
 
 		wait_for_all();
 
+		*sum = 0;
 		for (size_t i = 0; i < breadth; ++i)
 			*sum += sums[i];
 
