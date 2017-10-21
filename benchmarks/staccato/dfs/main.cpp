@@ -27,20 +27,15 @@ public:
 			return;
 		}
 
-		vector<DFSTask *> tasks(breadth);
 		vector<unsigned long> sums(breadth);
 
-		for (size_t i = 0; i < breadth; ++i) {
-			tasks[i] = new DFSTask(depth - 1, breadth, &sums[i]);
-			spawn(tasks[i]);
-		}
+		for (size_t i = 0; i < breadth; ++i)
+			spawn(new(child()) DFSTask(depth - 1, breadth, &sums[i]));
 
 		wait();
 
-		for (size_t i = 0; i < breadth; ++i) {
-			delete tasks[i];
+		for (size_t i = 0; i < breadth; ++i)
 			*sum += sums[i];
-		}
 
 		return;
 	}
@@ -69,11 +64,10 @@ int main(int argc, char *argv[])
 
 	auto start = system_clock::now();
 
-	scheduler::initialize(nthreads);
+	scheduler::initialize(sizeof(DFSTask), nthreads);
 
-	auto root = new DFSTask(depth, breadth, &answer);
-	scheduler::spawn_and_wait(root);
-	delete root;
+	scheduler::spawn(new(scheduler::root()) DFSTask(depth, breadth, &answer));
+	scheduler::wait();
 
 	scheduler::terminate();
 

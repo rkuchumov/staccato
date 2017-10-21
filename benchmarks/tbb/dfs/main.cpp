@@ -27,15 +27,12 @@ public:
 			return nullptr;
 		}
 
-		vector<DFSTask *> tasks(breadth);
 		vector<unsigned long> sums(breadth);
 
 		set_ref_count(breadth + 1);
 
-		for (size_t i = 0; i < breadth; ++i) {
-			tasks[i] = new(allocate_child()) DFSTask(depth - 1, breadth, &sums[i]);
-			spawn(*tasks[i]);
-		}
+		for (size_t i = 0; i < breadth; ++i)
+			spawn(*new(allocate_child()) DFSTask(depth - 1, breadth, &sums[i]));
 
 		wait_for_all();
 

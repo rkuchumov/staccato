@@ -21,17 +21,13 @@ public:
 			return;
 		}
 
-		unsigned long x, y;
-		FibTask *a = new FibTask(n - 1, &x);
-		FibTask *b = new FibTask(n - 2, &y);
+		unsigned long x;
+		spawn(new(child()) FibTask(n - 1, &x));
 
-		spawn(a);
-		spawn(b);
+		unsigned long y;
+		spawn(new(child()) FibTask(n - 2, &y));
 
 		wait();
-
-		delete a;
-		delete b;
 
 		*sum = x + y;
 
@@ -58,11 +54,10 @@ int main(int argc, char *argv[])
 
 	auto start = system_clock::now();
 
-	scheduler::initialize(nthreads);
+	scheduler::initialize(sizeof(FibTask));
 
-	auto root = new FibTask(n, &answer);
-	scheduler::spawn_and_wait(root);
-	delete root;
+	scheduler::spawn(new(scheduler::root()) FibTask(n, &answer));
+	scheduler::wait();
 
 	scheduler::terminate();
 
