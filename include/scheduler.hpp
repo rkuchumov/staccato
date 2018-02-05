@@ -6,44 +6,31 @@
 #include <atomic>
 #include <functional>
 
-#include "lambda_task.hpp"
 #include "constants.hpp"
+#include "worker.hpp"
 
 namespace staccato
 {
 
+template <typename T>
 class task;
 
-namespace internal
-{
-class worker;
-}
-
+template <typename T>
 class scheduler
 {
 public:
-	static void initialize(
-		size_t task_size = sizeof(internal::lambda_task),
-		size_t nthreads = 0,
-		size_t deque_log_size = 7
-	);
+	// TODO: rename max_degree to something related to task tree
+	scheduler(size_t nworkers, size_t max_degree);
 
-	static void terminate();
-
-	static uint8_t *root();
-
-	static void spawn(task *t);
-
-	static void spawn(std::function <void()> fn);
-
-	static void wait();
-
-private:
-	friend class task;
-	friend class internal::worker;
-
-	scheduler();
 	~scheduler();
+
+	void spawn_and_wait(T *root);
+
+// private:
+// 	friend class task;
+// 	friend class internal::worker;
+
+	void create_workers();
 
 	enum state_t { 
 		terminated,
@@ -51,20 +38,65 @@ private:
 		initialized,
 		terminating,
 	};
-	static std::atomic<state_t> state;
 
-	static task *m_root;
+	size_t m_nworkers;
+	size_t m_max_degree;
 
-	static void wait_workers_fork();
+	std::atomic<state_t> m_state;
 
-	static size_t workers_count;
-	static internal::worker **workers;
-
-
-	static void wait_until_initilized();
-
-	static internal::worker *get_victim(internal::worker *thief);
+	internal::worker<T> **m_workers;
 };
+
+template <typename T>
+scheduler<T>::scheduler(size_t nworkers, size_t max_degree)
+: m_nworkers(nworkers)
+, m_max_degree(max_degree)
+, m_state(state_t::terminated)
+{
+	m_state = state_t::initializing;
+
+	if (m_nworkers == 0)
+		m_nworkers = std::thread::hardware_concurrency();
+
+	create_workers();
+
+	m_state = state_t::initialized;
+}
+
+template <typename T>
+void scheduler<T>::create_workers()
+{
+	using namespace internal;
+
+	m_workers = new worker<T> *[m_nworkers];
+	for (size_t i = 0; i < m_nworkers; ++i)
+		m_workers[i] = new worker<T>();
+
+	for (int i = m_nworkers - 1; i >= 0; --i)
+		m_workers[i]->async_init(i, m_nworkers, m_workers, m_max_degree);
+}
+
+template <typename T>
+scheduler<T>::~scheduler()
+{
+	m_state = terminating;
+
+	for (size_t i = 1; i < m_nworkers; ++i)
+		m_workers[i]->join();
+
+	for (size_t i = 0; i < m_nworkers; ++i)
+		delete m_workers[i];
+
+	delete []m_workers;
+
+	m_state = terminated;
+}
+
+template <typename T>
+void scheduler<T>::spawn_and_wait(T *root)
+{
+	m_workers[0]->task_loop(root, root);
+}
 
 } /* namespace:staccato */ 
 

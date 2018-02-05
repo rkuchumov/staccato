@@ -7,16 +7,18 @@
 #include <cstdlib>
 
 #include "constants.hpp"
+#include "utils.hpp"
 
 namespace staccato
 {
 
-class scheduler;
 
 namespace internal {
+template <typename T>
 class worker;
 }
 
+template <typename T>
 class task {
 public:
 	task();
@@ -24,25 +26,76 @@ public:
 
 	virtual void execute() = 0;
 
-	uint8_t *child();
+	T *child();
 
-	void spawn(task *t);
+	void spawn(T *t);
 
 	void wait();
+	
+	void process(internal::worker<T> *worker);
+
+	bool finished();
 
 private:
-	friend class scheduler;
-	friend class internal::worker;
+	internal::worker<T> *m_worker;
+	T *m_parent;
 
-	static void process(internal::worker *executer, uint8_t *raw);
-	static bool has_finished(uint8_t *raw);
-
-	internal::worker *executer;
-
-	std::atomic_size_t subtask_count;
-	std::atomic_size_t *parent_subtask_count;
+	std::atomic_size_t m_nsubtasks;
 };
 
+template <typename T>
+task<T>::task()
+: m_worker(nullptr)
+, m_parent(nullptr)
+, m_nsubtasks(0)
+{ }
+
+template <typename T>
+task<T>::~task()
+{ }
+
+template <typename T>
+void task<T>::process(internal::worker<T> *worker)
+{
+	m_worker = worker;
+
+	m_worker->inc_tail();
+
+	execute();
+
+	m_worker->dec_tail();
+
+	if (m_parent != nullptr)
+		dec_relaxed(m_parent->m_nsubtasks);
+}
+
+template <typename T>
+bool task<T>::finished()
+{
+	return load_relaxed(m_nsubtasks) == 0;
+}
+
+template <typename T>
+T *task<T>::child()
+{
+	return m_worker->put_allocate();
+}
+
+template <typename T>
+void task<T>::spawn(T *t)
+{
+	inc_relaxed(m_nsubtasks);
+
+	t->m_parent = reinterpret_cast<T *>(this);
+
+	m_worker->put_commit();
+}
+
+template <typename T>
+void task<T>::wait()
+{
+	m_worker->task_loop(reinterpret_cast<T *>(this));
+}
 
 } /* staccato */ 
 

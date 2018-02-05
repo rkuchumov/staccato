@@ -7,7 +7,7 @@
 using namespace std;
 using namespace staccato;
 
-class FibTask: public task
+class FibTask: public task<FibTask>
 {
 public:
 	FibTask (int n_, long *sum_): n(n_), sum(sum_)
@@ -46,12 +46,12 @@ int main(int argc, char *argv[])
 		n = atoi(argv[1]);
 	}
 
-	scheduler::initialize(sizeof(FibTask));
+	auto root = new FibTask(n, &answer);
 
-	scheduler::spawn(new(scheduler::root()) FibTask(n, &answer));
-	scheduler::wait();
-
-	scheduler::terminate();
+	{
+		scheduler<FibTask> sh(1, 2);
+		sh.spawn_and_wait(root);
+	}
 
 	cout << "fib(" << n << ") = " << answer << "\n";
 

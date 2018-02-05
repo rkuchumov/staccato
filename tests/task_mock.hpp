@@ -8,7 +8,7 @@
 
 using namespace ::testing;
 
-class task_mock: public staccato::task
+class task_mock: public staccato::task<task_mock>
 {
 public:
 	task_mock(size_t id_) : id(id_)

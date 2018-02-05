@@ -30,8 +30,6 @@ set(sources
 	"src/scheduler.cpp"
 	"src/task.cpp"
 	"src/task_deque.cpp"
-	"src/root_task.cpp"
-	"src/lambda_task.cpp"
 	"src/worker.cpp"
 )
 
@@ -42,14 +40,9 @@ install(TARGETS staccato DESTINATION lib)
 
 set(HEADERS
 	include/constants.hpp
-	include/lambda_task.hpp
-	include/root_task.hpp
 	include/scheduler.hpp
-	include/task_args.hpp
-	include/task_array.hpp
-	include/task_deque.hpp
 	include/task.hpp
-	include/task_stack.hpp
+	include/task_deque.hpp
 	include/worker.hpp
 )
 
@@ -58,13 +51,7 @@ install(
 	DESTINATION include/staccato
 )
 
-if (STACCATO_BUILD_TESTS)
-	enable_testing()
-	add_subdirectory(tests)
-endif()
-
-if (STACCATO_BUILD_TESTS OR STACCATO_BUILD_EXAMPLES)
-	add_subdirectory(examples/01-class)
-	add_subdirectory(examples/02-lambda)
-endif()
+enable_testing()
+add_subdirectory(examples/01-class)
+add_subdirectory(tests)
 
