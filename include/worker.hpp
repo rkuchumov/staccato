@@ -11,7 +11,6 @@
 
 namespace staccato
 {
-
 namespace internal
 {
 
@@ -30,12 +29,9 @@ public:
 
 	void join();
 
-	void task_loop(T *waiting = nullptr, T *t = nullptr);
+	void task_loop(T *waiting = nullptr, T *t = nullptr, task_deque<T> *tail = nullptr);
 
 	bool ready() const;
-
-	T *put_allocate();
-	void put_commit();
 
 private:
 	void init(
@@ -46,18 +42,9 @@ private:
 
 	void wait_collegues_init();
 
-    void inc_tail();
+    void grow_tail(task_deque<T> *tail);
 
-    void dec_tail();
-
-    size_t predict_page_size();
-
-	const size_t m_taskgraph_degree;
-	const size_t m_taskgraph_height;
-
-	std::thread *m_thread;
-	std::atomic_bool m_ready;
-	lifo_allocator *m_allocator;
+    inline size_t predict_page_size();
 
 	struct collegue_t {
 		worker<T> *w;
@@ -65,13 +52,19 @@ private:
 		size_t level;
 	};
 
+	const size_t m_taskgraph_degree;
+	const size_t m_taskgraph_height;
+
+	std::thread *m_thread;
+
+	std::atomic_bool m_ready;
+
+	lifo_allocator *m_allocator;
+
 	size_t m_ncollegues;
 	collegue_t *m_collegues;
 
 	task_deque<T> *m_head_deque;
-
-	// TODO: dont use this var, store in stack instead
-	task_deque<T> *m_tail_deque;
 };
 
 template <typename T>
@@ -82,7 +75,6 @@ worker<T>::worker(size_t taskgraph_degree, size_t taskgraph_height)
 , m_ready(false)
 , m_allocator(nullptr)
 , m_head_deque(nullptr)
-, m_tail_deque(nullptr)
 { }
 
 template <typename T>
@@ -138,13 +130,16 @@ void worker<T>::init(
 		++j;
 	}
 
-	// TODO: allocate all tree structure
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
 	new(d) task_deque<T>(t);
 
 	m_head_deque = d;
-	m_tail_deque = d;
+
+	for (size_t i = 1; i < m_taskgraph_height; ++i) {
+		grow_tail(d);
+		d = d->get_next();
+	}
 }
 
 template <typename T>
@@ -176,21 +171,22 @@ void worker<T>::join()
 }
 
 template <typename T>
-void worker<T>::task_loop(T *waiting, T *t)
+void worker<T>::task_loop(T *waiting, T *t, task_deque<T> *tail)
 {
+	if (!tail)
+		tail = m_head_deque;
+
 	while (true) { // Local tasks loop
-		if (t) { 
-			inc_tail();
+		if (t) {
+			grow_tail(tail);
 
-			t->process(this);
-
-			dec_tail();
+			t->process(this, tail->get_next());
 		}
 
 		if (waiting && waiting->finished())
 			return;
 
-		t = m_tail_deque->take();
+		t = tail->take();
 
 		if (!t)
 			break;
@@ -198,41 +194,17 @@ void worker<T>::task_loop(T *waiting, T *t)
 }
 
 template <typename T>
-void worker<T>::inc_tail()
+void worker<T>::grow_tail(task_deque<T> *tail)
 {
-	if (!m_tail_deque->get_next()) {
-		auto d = m_allocator->alloc<task_deque<T>>();
-		auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
-		new(d) task_deque<T>(t);
+	if (tail->get_next())
+		return;
 
-		d->set_prev(m_tail_deque);
-		m_tail_deque->set_next(d);
-	}
+	auto d = m_allocator->alloc<task_deque<T>>();
+	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
+	new(d) task_deque<T>(t);
 
-	m_tail_deque = m_tail_deque->get_next();
-	m_tail_deque->set_null(false);
-}
-
-template <typename T>
-void worker<T>::dec_tail()
-{
-	if (!m_tail_deque->get_prev())
-		return; // TODO: assert(false)???
-
-	m_tail_deque->set_null(true);
-	m_tail_deque = m_tail_deque->get_prev();
-}
-
-template <typename T>
-T *worker<T>::put_allocate()
-{
-	return m_tail_deque->put_allocate();
-}
-
-template <typename T>
-void worker<T>::put_commit()
-{
-	m_tail_deque->put_commit();
+	d->set_prev(tail);
+	tail->set_next(d);
 }
 
 }

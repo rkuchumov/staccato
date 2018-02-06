@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
 	auto root = new FibTask(n, &answer);
 
 	{
-		scheduler<FibTask> sh(1, 2);
+		scheduler<FibTask> sh(1, 2, n);
 		sh.spawn_and_wait(root);
 	}
 

@@ -7,11 +7,11 @@
 #include <cstdlib>
 
 #include "constants.hpp"
+#include "task_deque.hpp"
 #include "utils.hpp"
 
 namespace staccato
 {
-
 
 namespace internal {
 template <typename T>
@@ -32,13 +32,22 @@ public:
 
 	void wait();
 	
-	void process(internal::worker<T> *worker);
+	void process(internal::worker<T> *worker, internal::task_deque<T> *tail);
 
-	bool finished();
+	bool finished() const;
+
+	size_t level() const;
 
 private:
+	internal::task_deque<T> *inc_tail(internal::task_deque<T> *tail);
+
 	internal::worker<T> *m_worker;
-	T *m_parent;
+
+	internal::task_deque<T> *m_tail;
+
+	size_t m_level;
+
+	std::atomic_size_t *m_parent_nsubtasks;
 
 	std::atomic_size_t m_nsubtasks;
 };
@@ -46,7 +55,8 @@ private:
 template <typename T>
 task<T>::task()
 : m_worker(nullptr)
-, m_parent(nullptr)
+, m_level(0)
+, m_parent_nsubtasks(nullptr)
 , m_nsubtasks(0)
 { }
 
@@ -55,26 +65,37 @@ task<T>::~task()
 { }
 
 template <typename T>
-void task<T>::process(internal::worker<T> *worker)
+void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail)
 {
 	m_worker = worker;
+	m_tail = tail;
+
+	m_tail->set_null(false);
 
 	execute();
 
-	if (m_parent != nullptr)
-		dec_relaxed(m_parent->m_nsubtasks);
+	m_tail->set_null(true);
+
+	if (m_parent_nsubtasks != nullptr)
+		dec_relaxed_p(m_parent_nsubtasks);
 }
 
 template <typename T>
-bool task<T>::finished()
+bool task<T>::finished() const
 {
 	return load_relaxed(m_nsubtasks) == 0;
 }
 
 template <typename T>
+size_t task<T>::level() const
+{
+	return m_level;
+}
+
+template <typename T>
 T *task<T>::child()
 {
-	return m_worker->put_allocate();
+	return m_tail->put_allocate();
 }
 
 template <typename T>
@@ -82,15 +103,16 @@ void task<T>::spawn(T *t)
 {
 	inc_relaxed(m_nsubtasks);
 
-	t->m_parent = reinterpret_cast<T *>(this);
+	t->m_level = m_level + 1;
+	t->m_parent_nsubtasks = &m_nsubtasks;
 
-	m_worker->put_commit();
+	m_tail->put_commit();
 }
 
 template <typename T>
 void task<T>::wait()
 {
-	m_worker->task_loop(reinterpret_cast<T *>(this));
+	m_worker->task_loop(reinterpret_cast<T *>(this), nullptr, m_tail);
 }
 
 } /* staccato */ 
