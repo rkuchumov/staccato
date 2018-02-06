@@ -42,6 +42,10 @@
 namespace staccato {
 namespace internal {
 
+inline size_t cache_align(size_t x, size_t to = STACCATO_CACHE_SIZE) {
+	return (x + (to - 1)) & ~(to - 1);
+}
+
 inline uint32_t xorshift_rand() {
 	STACCATO_TLS static uint32_t x = 2463534242;
 

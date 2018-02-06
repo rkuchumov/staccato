@@ -19,18 +19,18 @@ template <typename T>
 class scheduler
 {
 public:
-	// TODO: rename max_degree to something related to task tree
-	scheduler(size_t nworkers, size_t max_degree);
+	scheduler(
+		size_t nworkers,
+		size_t taskgraph_degree,
+		size_t taskgraph_height = 1
+	);
 
 	~scheduler();
 
 	void spawn_and_wait(T *root);
 
-// private:
-// 	friend class task;
-// 	friend class internal::worker;
-
-	void create_workers();
+private:
+	void create_workers(size_t taskgraph_degree, size_t taskgraph_height);
 
 	enum state_t { 
 		terminated,
@@ -40,17 +40,18 @@ public:
 	};
 
 	size_t m_nworkers;
-	size_t m_max_degree;
-
 	std::atomic<state_t> m_state;
 
 	internal::worker<T> **m_workers;
 };
 
 template <typename T>
-scheduler<T>::scheduler(size_t nworkers, size_t max_degree)
+scheduler<T>::scheduler(
+	size_t nworkers,
+	size_t taskgraph_degree,
+	size_t taskgraph_height
+)
 : m_nworkers(nworkers)
-, m_max_degree(max_degree)
 , m_state(state_t::terminated)
 {
 	m_state = state_t::initializing;
@@ -58,22 +59,22 @@ scheduler<T>::scheduler(size_t nworkers, size_t max_degree)
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
-	create_workers();
+	create_workers(taskgraph_degree, taskgraph_height);
 
 	m_state = state_t::initialized;
 }
 
 template <typename T>
-void scheduler<T>::create_workers()
+void scheduler<T>::create_workers(size_t taskgraph_degree, size_t taskgraph_height)
 {
 	using namespace internal;
 
 	m_workers = new worker<T> *[m_nworkers];
 	for (size_t i = 0; i < m_nworkers; ++i)
-		m_workers[i] = new worker<T>();
+		m_workers[i] = new worker<T>(taskgraph_degree, taskgraph_height);
 
 	for (int i = m_nworkers - 1; i >= 0; --i)
-		m_workers[i]->async_init(i, m_nworkers, m_workers, m_max_degree);
+		m_workers[i]->async_init(i, m_nworkers, m_workers);
 }
 
 template <typename T>

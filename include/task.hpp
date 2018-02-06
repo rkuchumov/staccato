@@ -59,11 +59,7 @@ void task<T>::process(internal::worker<T> *worker)
 {
 	m_worker = worker;
 
-	m_worker->inc_tail();
-
 	execute();
-
-	m_worker->dec_tail();
 
 	if (m_parent != nullptr)
 		dec_relaxed(m_parent->m_nsubtasks);

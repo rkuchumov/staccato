@@ -60,3 +60,4 @@ function(my_add_test name sources)
 endfunction()
 
 my_add_test(test_task_deque task_deque.cpp)
+my_add_test(test_lifo_allocator lifo_allocator.cpp)

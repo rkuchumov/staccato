@@ -5,6 +5,7 @@
 #include <thread>
 
 #include "task_deque.hpp"
+#include "lifo_allocator.hpp"
 #include "constants.hpp"
 #include "task.hpp"
 
@@ -18,14 +19,13 @@ template <typename T>
 class worker
 {
 public:
-	worker();
+	worker(size_t taskgraph_degree, size_t taskgraph_height);
 	~worker();
 
 	void async_init(
 		size_t id,
 		size_t nworkers,
-		worker<T> **workers,
-		size_t max_degree
+		worker<T> **workers
 	);
 
 	void join();
@@ -34,10 +34,6 @@ public:
 
 	bool ready() const;
 
-    // TODO: rename
-    void inc_tail();
-    void dec_tail();
-
 	T *put_allocate();
 	void put_commit();
 
@@ -45,14 +41,23 @@ private:
 	void init(
 		size_t id,
 		size_t nworkers,
-		worker<T> **workers,
-		size_t max_degree
+		worker<T> **workers
 	);
 
 	void wait_collegues_init();
 
+    void inc_tail();
+
+    void dec_tail();
+
+    size_t predict_page_size();
+
+	const size_t m_taskgraph_degree;
+	const size_t m_taskgraph_height;
+
 	std::thread *m_thread;
 	std::atomic_bool m_ready;
+	lifo_allocator *m_allocator;
 
 	struct collegue_t {
 		worker<T> *w;
@@ -64,50 +69,46 @@ private:
 	collegue_t *m_collegues;
 
 	task_deque<T> *m_head_deque;
+
+	// TODO: dont use this var, store in stack instead
 	task_deque<T> *m_tail_deque;
 };
 
 template <typename T>
-worker<T>::worker()
-: m_thread(nullptr)
+worker<T>::worker(size_t taskgraph_degree, size_t taskgraph_height)
+: m_taskgraph_degree(taskgraph_degree)
+, m_taskgraph_height(taskgraph_height)
+, m_thread(nullptr)
+, m_ready(false)
+, m_allocator(nullptr)
 , m_head_deque(nullptr)
 , m_tail_deque(nullptr)
-{
-	delete m_thread;
-
-	// TODO: delete allocator instead
-	delete []m_collegues;
-
-	auto d = m_head_deque;
-	while (d) {
-		auto t = d;
-		d = d->get_next();
-		delete t;
-	}
-}
+{ }
 
 template <typename T>
 worker<T>::~worker()
-{ }
+{
+	delete m_thread;
+	delete m_allocator;
+}
 
 template <typename T>
 void worker<T>::async_init(
 	size_t id,
 	size_t nworkers,
-	worker<T> **workers,
-	size_t max_degree
+	worker<T> **workers
 ) {
 	// TODO: use sync barrier
 
 	if (id == 0) {
-		init(id, nworkers, workers, max_degree);
+		init(id, nworkers, workers);
 		m_ready = true;
 		wait_collegues_init();
 		return;
 	}
 
 	m_thread = new std::thread([=] {
-			init(id, nworkers, workers, max_degree);
+			init(id, nworkers, workers);
 			m_ready = true;
 			wait_collegues_init();
 			// Debug() << "Starting worker::tasks_loop()";
@@ -120,18 +121,14 @@ template <typename T>
 void worker<T>::init(
 	size_t id,
 	size_t nworkers,
-	worker<T> **workers,
-	size_t max_degree
-)
-{
-	// TODO: allocate allocator
-	auto d = new task_deque<T>(max_degree);
-	m_head_deque = d;
-	m_tail_deque = d;
-	// TODO: allocate all tree structure
-
+	worker<T> **workers
+) {
 	m_ncollegues = nworkers - 1;
-	m_collegues = new collegue_t[m_ncollegues];
+
+	m_allocator = new lifo_allocator(predict_page_size());
+
+	m_collegues = m_allocator->alloc_array<collegue_t>(m_ncollegues);
+	new(m_collegues) collegue_t[m_ncollegues];
 
 	for (size_t i = 0, j = 0; i < nworkers; ++i) {
 		if (i == id)
@@ -140,6 +137,28 @@ void worker<T>::init(
 		m_collegues[j].w = workers[i];
 		++j;
 	}
+
+	// TODO: allocate all tree structure
+	auto d = m_allocator->alloc<task_deque<T>>();
+	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
+	new(d) task_deque<T>(t);
+
+	m_head_deque = d;
+	m_tail_deque = d;
+}
+
+template <typename T>
+inline size_t worker<T>::predict_page_size()
+{
+	size_t c = 0;
+	c += alignof(collegue_t) + sizeof(collegue_t) * m_ncollegues;
+
+	size_t d = 0;
+	d += alignof(task_deque<T>) + sizeof(task_deque<T>);
+	d += alignof(T) + sizeof(T) * m_taskgraph_degree;
+	d *= m_taskgraph_height;
+
+	return c + d;
 }
 
 template <typename T>
@@ -160,8 +179,13 @@ template <typename T>
 void worker<T>::task_loop(T *waiting, T *t)
 {
 	while (true) { // Local tasks loop
-		if (t)
+		if (t) { 
+			inc_tail();
+
 			t->process(this);
+
+			dec_tail();
+		}
 
 		if (waiting && waiting->finished())
 			return;
@@ -176,8 +200,14 @@ void worker<T>::task_loop(T *waiting, T *t)
 template <typename T>
 void worker<T>::inc_tail()
 {
-	if (!m_tail_deque->get_next())
-		m_tail_deque->create_next(); // TODO: dont' create here
+	if (!m_tail_deque->get_next()) {
+		auto d = m_allocator->alloc<task_deque<T>>();
+		auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
+		new(d) task_deque<T>(t);
+
+		d->set_prev(m_tail_deque);
+		m_tail_deque->set_next(d);
+	}
 
 	m_tail_deque = m_tail_deque->get_next();
 	m_tail_deque->set_null(false);

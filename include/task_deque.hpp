@@ -7,6 +7,7 @@
 
 #include "constants.hpp"
 #include "utils.hpp"
+#include "lifo_allocator.hpp"
 
 namespace staccato
 {
@@ -18,10 +19,12 @@ template <typename T>
 class task_deque
 {
 public:
-	task_deque(size_t size);
+	task_deque(T *mem);
 	~task_deque();
 
-	void create_next();
+	void set_next(task_deque<T> *d);
+	void set_prev(task_deque<T> *d);
+
 	task_deque<T> *get_next();
 	task_deque<T> *get_prev();
 
@@ -35,7 +38,6 @@ public:
 	T *steal(bool *was_empty);
 
 private:
-	const size_t m_size;
 	T * m_array;
 
 	task_deque<T> *m_next;
@@ -46,29 +48,29 @@ private:
 };
 
 template <typename T>
-task_deque<T>::task_deque(size_t size)
-: m_size(size)
-, m_array(nullptr)
+task_deque<T>::task_deque(T *mem)
+: m_array(mem)
 , m_next(nullptr)
 , m_prev(nullptr)
 {
-	m_array = reinterpret_cast<T *> (new char[size * sizeof(T)]);
 	store_relaxed(m_top, m_array + 1);
 	store_relaxed(m_bottom, m_array + 1);
 }
 
 template <typename T>
 task_deque<T>::~task_deque()
+{ }
+
+template <typename T>
+void task_deque<T>::set_next(task_deque<T> *d)
 {
-	// delete []m_array;
+	m_next = d;
 }
 
 template <typename T>
-void task_deque<T>::create_next()
+void task_deque<T>::set_prev(task_deque<T> *d)
 {
-	auto n = new task_deque<T>(m_size);
-	n->m_prev = this;
-	m_next = n;
+	m_prev = d;
 }
 
 template <typename T>

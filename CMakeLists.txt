@@ -53,5 +53,5 @@ install(
 
 enable_testing()
 add_subdirectory(examples/01-class)
-add_subdirectory(tests)
+# add_subdirectory(tests)
 
