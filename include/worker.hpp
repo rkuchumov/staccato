@@ -29,7 +29,7 @@ public:
 
 	void join();
 
-	void task_loop(T *waiting = nullptr, T *t = nullptr, task_deque<T> *tail = nullptr);
+	void task_loop(T *t = nullptr, task_deque<T> *tail = nullptr);
 
 	bool ready() const;
 
@@ -59,10 +59,10 @@ private:
 
 	std::atomic_bool m_ready;
 
-	lifo_allocator *m_allocator;
-
 	size_t m_ncollegues;
 	collegue_t *m_collegues;
+
+	lifo_allocator *m_allocator;
 
 	task_deque<T> *m_head_deque;
 };
@@ -103,7 +103,7 @@ void worker<T>::async_init(
 			init(id, nworkers, workers);
 			m_ready = true;
 			wait_collegues_init();
-			// Debug() << "Starting worker::tasks_loop()";
+			Debug() << "Starting worker::tasks_loop()";
 			task_loop();
 		}
 	);
@@ -133,6 +133,7 @@ void worker<T>::init(
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
 	new(d) task_deque<T>(t);
+	d->set_null(false);
 
 	m_head_deque = d;
 
@@ -171,7 +172,7 @@ void worker<T>::join()
 }
 
 template <typename T>
-void worker<T>::task_loop(T *waiting, T *t, task_deque<T> *tail)
+void worker<T>::task_loop(T *t, task_deque<T> *tail)
 {
 	if (!tail)
 		tail = m_head_deque;
@@ -183,13 +184,15 @@ void worker<T>::task_loop(T *waiting, T *t, task_deque<T> *tail)
 			t->process(this, tail->get_next());
 		}
 
-		if (waiting && waiting->finished())
-			return;
-
 		t = tail->take();
 
-		if (!t)
+		if (t)
+			continue;
+
+		if (tail->have_stolen())
 			break;
+
+		return;
 	}
 }
 

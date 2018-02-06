@@ -28,7 +28,10 @@ public:
 	task_deque<T> *get_next();
 	task_deque<T> *get_prev();
 
-	bool is_null();
+	bool have_stolen() const;
+	void return_stolen();
+
+	bool null();
 	void set_null(bool null);
 
 	T *put_allocate();
@@ -43,6 +46,8 @@ private:
 	task_deque<T> *m_next;
 	task_deque<T> *m_prev;
 
+	// TODO: use this instead of task::waiting 
+	STACCATO_ALIGN std::atomic_size_t m_nstolen;
 	STACCATO_ALIGN std::atomic<T *> m_top;
 	STACCATO_ALIGN std::atomic<T *> m_bottom;
 };
@@ -52,10 +57,7 @@ task_deque<T>::task_deque(T *mem)
 : m_array(mem)
 , m_next(nullptr)
 , m_prev(nullptr)
-{
-	store_relaxed(m_top, m_array + 1);
-	store_relaxed(m_bottom, m_array + 1);
-}
+{ }
 
 template <typename T>
 task_deque<T>::~task_deque()
@@ -148,7 +150,21 @@ T *task_deque<T>::steal(bool *was_empty)
 	if (!cas_weak(m_top, t, t + 1))
 		return nullptr;
 
+	inc_relaxed(m_nstolen);
+
 	return t - 1;
+}
+
+template <typename T>
+bool task_deque<T>::have_stolen() const
+{
+	return load_relaxed(m_nstolen) > 0;
+}
+
+template <typename T>
+void task_deque<T>::return_stolen()
+{
+	dec_relaxed(m_nstolen);
 }
 
 template <typename T>
@@ -163,7 +179,7 @@ void task_deque<T>::set_null(bool null)
 }
 
 template <typename T>
-bool task_deque<T>::is_null()
+bool task_deque<T>::null()
 {
 	return load_relaxed(m_top) == nullptr;
 }

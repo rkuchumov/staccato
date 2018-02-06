@@ -96,7 +96,7 @@ scheduler<T>::~scheduler()
 template <typename T>
 void scheduler<T>::spawn_and_wait(T *root)
 {
-	m_workers[0]->task_loop(root, root);
+	m_workers[0]->task_loop(root);
 }
 
 } /* namespace:staccato */ 
