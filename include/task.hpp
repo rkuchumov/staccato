@@ -32,21 +32,16 @@ public:
 
 	void wait();
 	
-	void process(internal::worker<T> *worker, internal::task_deque<T> *tail);
-
-	// size_t level() const;
+	void process(internal::worker<T> *worker, internal::task_deque<T> *tail, size_t level);
 
 private:
 	internal::worker<T> *m_worker;
 
 	internal::task_deque<T> *m_tail;
-
-	// size_t m_level;
 };
 
 template <typename T>
 task<T>::task()
-// , m_level(0)
 { }
 
 template <typename T>
@@ -54,23 +49,18 @@ task<T>::~task()
 { }
 
 template <typename T>
-void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail)
+void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail, size_t level)
 {
 	m_worker = worker;
 	m_tail = tail;
 
+	m_tail->set_level(level + 1);
 	m_tail->set_null(false);
 
 	execute();
 
 	m_tail->set_null(true);
 }
-
-// template <typename T>
-// size_t task<T>::level() const
-// {
-// 	return m_level;
-// }
 
 template <typename T>
 T *task<T>::child()
@@ -81,15 +71,13 @@ T *task<T>::child()
 template <typename T>
 void task<T>::spawn(T *)
 {
-	// t->m_level = m_level + 1;
-
 	m_tail->put_commit();
 }
 
 template <typename T>
 void task<T>::wait()
 {
-	m_worker->task_loop(m_tail);
+	m_worker->local_loop(m_tail);
 }
 
 } /* staccato */ 

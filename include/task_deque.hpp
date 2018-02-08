@@ -32,17 +32,22 @@ public:
 	bool have_stolen() const;
 	void return_stolen();
 
-	bool null();
+	bool null() const;
 	void set_null(bool null);
 
 	T *put_allocate();
 	void put_commit();
 
 	T *take();
-	T *steal(bool *was_empty);
+	T *steal(bool *was_empty, bool *was_null);
+
+	void set_level(size_t level);
+	size_t get_level() const;
 
 private:
 	T * m_array;
+
+	size_t m_level;
 
 	task_deque<T> *m_next;
 	task_deque<T> *m_prev;
@@ -56,6 +61,7 @@ private:
 template <typename T>
 task_deque<T>::task_deque(T *mem)
 : m_array(mem)
+, m_level(0)
 , m_next(nullptr)
 , m_prev(nullptr)
 { }
@@ -135,9 +141,14 @@ T *task_deque<T>::take()
 }
  
 template <typename T>
-T *task_deque<T>::steal(bool *was_empty)
+T *task_deque<T>::steal(bool *was_empty, bool *was_null)
 {
 	auto t = load_acquire(m_top);
+	if (!t) {
+		*was_null = true;
+		return nullptr;
+	}
+
 	atomic_fence_seq_cst();
 	auto b = load_acquire(m_bottom);
 
@@ -180,9 +191,21 @@ void task_deque<T>::set_null(bool null)
 }
 
 template <typename T>
-bool task_deque<T>::null()
+bool task_deque<T>::null() const
 {
 	return load_relaxed(m_top) == nullptr;
+}
+
+template <typename T>
+void task_deque<T>::set_level(size_t level)
+{
+	m_level = level;
+}
+
+template <typename T>
+size_t task_deque<T>::get_level() const
+{
+	return m_level;
 }
 
 } // namespace internal

@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 	}
 
 	{
-		scheduler<FibTask> sh(1, 2, n);
+		scheduler<FibTask> sh(2, 2, n);
 		sh.spawn(new(sh.root()) FibTask(n, &answer));
 		sh.wait();
 	}

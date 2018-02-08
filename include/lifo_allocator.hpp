@@ -64,6 +64,8 @@ lifo_allocator::page::page(size_t size)
 : m_next(nullptr)
 , m_size_left(round_align(m_alignment, size))
 {
+	// TODO: Nope, don't allocate like that. I should init page class over
+	// allocated memory
 	m_stack = aligned_alloc(m_alignment, m_size_left);
 	m_base = m_stack;
 }
