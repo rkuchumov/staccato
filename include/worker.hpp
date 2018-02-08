@@ -29,9 +29,13 @@ public:
 
 	void join();
 
-	void task_loop(T *waiting = nullptr, T *t = nullptr, task_deque<T> *tail = nullptr);
-
 	bool ready() const;
+
+	void task_loop(task_deque<T> *tail = nullptr);
+
+	T *root_allocate();
+	T *root_commit();
+	void root_wait();
 
 private:
 	void init(
@@ -59,10 +63,10 @@ private:
 
 	std::atomic_bool m_ready;
 
-	lifo_allocator *m_allocator;
-
 	size_t m_ncollegues;
 	collegue_t *m_collegues;
+
+	lifo_allocator *m_allocator;
 
 	task_deque<T> *m_head_deque;
 };
@@ -103,8 +107,8 @@ void worker<T>::async_init(
 			init(id, nworkers, workers);
 			m_ready = true;
 			wait_collegues_init();
-			// Debug() << "Starting worker::tasks_loop()";
-			task_loop();
+			Debug() << "Starting worker::tasks_loop()";
+			// task_loop();
 		}
 	);
 }
@@ -133,6 +137,7 @@ void worker<T>::init(
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
 	new(d) task_deque<T>(t);
+	d->set_null(false);
 
 	m_head_deque = d;
 
@@ -171,26 +176,21 @@ void worker<T>::join()
 }
 
 template <typename T>
-void worker<T>::task_loop(T *waiting, T *t, task_deque<T> *tail)
+T *worker<T>::root_allocate()
 {
-	if (!tail)
-		tail = m_head_deque;
+	return m_head_deque->put_allocate();
+}
 
-	while (true) { // Local tasks loop
-		if (t) {
-			grow_tail(tail);
+template <typename T>
+T *worker<T>::root_commit()
+{
+	m_head_deque->put_commit();
+}
 
-			t->process(this, tail->get_next());
-		}
-
-		if (waiting && waiting->finished())
-			return;
-
-		t = tail->take();
-
-		if (!t)
-			break;
-	}
+template <typename T>
+void worker<T>::root_wait()
+{
+	task_loop(m_head_deque);
 }
 
 template <typename T>
@@ -205,6 +205,29 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 
 	d->set_prev(tail);
 	tail->set_next(d);
+}
+
+template <typename T>
+void worker<T>::task_loop(task_deque<T> *tail)
+{
+	while (true) { // Local tasks loop
+		auto t = tail->take();
+
+		if (t) {
+			// XXX: porbably instuction cache-miss is caused by 
+			// the following call
+			grow_tail(tail);
+			t->process(this, tail->get_next());
+		}
+
+		if (t)
+			continue;
+
+		if (tail->have_stolen())
+			break;
+
+		return;
+	}
 }
 
 }

@@ -46,11 +46,10 @@ int main(int argc, char *argv[])
 		n = atoi(argv[1]);
 	}
 
-	auto root = new FibTask(n, &answer);
-
 	{
 		scheduler<FibTask> sh(1, 2, n);
-		sh.spawn_and_wait(root);
+		sh.spawn(new(sh.root()) FibTask(n, &answer));
+		sh.wait();
 	}
 
 	cout << "fib(" << n << ") = " << answer << "\n";

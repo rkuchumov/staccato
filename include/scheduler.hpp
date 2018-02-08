@@ -27,7 +27,9 @@ public:
 
 	~scheduler();
 
-	void spawn_and_wait(T *root);
+	T *root();
+	void spawn(T *t);
+	void wait();
 
 private:
 	void create_workers(size_t taskgraph_degree, size_t taskgraph_height);
@@ -94,9 +96,21 @@ scheduler<T>::~scheduler()
 }
 
 template <typename T>
-void scheduler<T>::spawn_and_wait(T *root)
+T *scheduler<T>::root()
 {
-	m_workers[0]->task_loop(root, root);
+	return m_workers[0]->root_allocate();
+}
+
+template <typename T>
+void scheduler<T>::spawn(T *)
+{
+	m_workers[0]->root_commit();
+}
+
+template <typename T>
+void scheduler<T>::wait()
+{
+	m_workers[0]->root_wait();
 }
 
 } /* namespace:staccato */ 
