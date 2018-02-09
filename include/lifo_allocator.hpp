@@ -6,6 +6,8 @@
 #include <memory>
 #include <new>
 
+#include "utils.hpp"
+
 namespace staccato
 {
 namespace internal
@@ -31,7 +33,7 @@ public:
 private:
 	class page {
 	public:
-		page(size_t size = m_alignment);
+		page(void *mem, size_t size);
 
 		~page();
 
@@ -41,9 +43,9 @@ private:
 
 		page *get_next() const;
 
-	private:
-		static const size_t m_alignment = 4 * (1 << 10);
+		static page *allocate_page(size_t alignment, size_t size);
 
+	private:
 		page *m_next;
 		size_t m_size_left;
 		void *m_stack;
@@ -54,25 +56,23 @@ private:
 
 	void *alloc(size_t alignment, size_t size);
 
+	static const size_t m_page_alignment = 4 * (1 << 10);
+
 	const size_t m_page_size;
 
 	page *m_head;
 	page *m_tail;
 };
 
-lifo_allocator::page::page(size_t size)
+lifo_allocator::page::page(void *mem, size_t size)
 : m_next(nullptr)
-, m_size_left(round_align(m_alignment, size))
-{
-	// TODO: Nope, don't allocate like that. I should init page class over
-	// allocated memory
-	m_stack = aligned_alloc(m_alignment, m_size_left);
-	m_base = m_stack;
-}
+, m_size_left(size)
+, m_stack(mem)
+, m_base(reinterpret_cast<uint8_t *>(mem) + sizeof(page))
+{ }
 
 lifo_allocator::page::~page()
 {
-	std::free(m_stack);
 }
 
 void lifo_allocator::page::set_next(lifo_allocator::page *p)
@@ -98,10 +98,22 @@ void *lifo_allocator::page::alloc(size_t alignment, size_t size)
 	return p;
 }
 
+lifo_allocator::page *lifo_allocator::page::allocate_page(
+	size_t alignment,
+	size_t size
+) {
+	auto sz = round_align(alignment, size);
+	auto p = aligned_alloc(alignment, sz);
+
+	new(p) page(p, sz - sizeof(page));
+
+	return reinterpret_cast<page *>(p);
+}
+
 lifo_allocator::lifo_allocator(size_t page_size)
 : m_page_size(page_size)
 {
-	m_head = new page(page_size);
+	m_head = page::allocate_page(m_page_alignment, m_page_size);
 	m_tail = m_head;
 }
 
@@ -112,7 +124,7 @@ lifo_allocator::~lifo_allocator()
 	while (n) {
 		auto p = n;
 		n = n->get_next();
-		delete p;
+		std::free(p);
 	}
 }
 
@@ -151,7 +163,7 @@ void lifo_allocator::inc_tail(size_t required_size)
 	if (required_size > sz)
 		sz = required_size;
 
-	auto p = new page(sz);
+	auto p = page::allocate_page(m_page_alignment, sz);
 
 	m_tail->set_next(p);
 	m_tail = p;

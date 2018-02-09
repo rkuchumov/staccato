@@ -4,7 +4,11 @@
 #include <task.hpp>
 #include <scheduler.hpp>
 
+#include <thread>
+#include <chrono>
+
 using namespace std;
+using namespace std::chrono;
 using namespace staccato;
 
 class FibTask: public task<FibTask>
@@ -15,7 +19,13 @@ public:
 
 	void execute() {
 		if (n <= 2) {
-			*sum = 1;
+
+			int a = 1;
+			for (int i = 0; i < 500; ++i) {
+				a += i;
+			}
+
+			*sum = a;
 			return;
 		}
 

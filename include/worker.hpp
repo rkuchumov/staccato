@@ -58,11 +58,14 @@ private:
 	struct collegue_t {
 		worker<T> *w;
 		task_deque<T> *head;
+		task_deque<T> *tail;
 		size_t level;
 	};
 
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
+
+	lifo_allocator *m_allocator;
 
 	std::thread *m_thread;
 
@@ -73,8 +76,6 @@ private:
 	size_t m_ncollegues;
 	collegue_t *m_collegues;
 
-	lifo_allocator *m_allocator;
-
 	task_deque<T> *m_head_deque;
 };
 
@@ -82,10 +83,10 @@ template <typename T>
 worker<T>::worker(size_t taskgraph_degree, size_t taskgraph_height)
 : m_taskgraph_degree(taskgraph_degree)
 , m_taskgraph_height(taskgraph_height)
+, m_allocator(nullptr)
 , m_thread(nullptr)
 , m_joined(false)
 , m_ready(false)
-, m_allocator(nullptr)
 , m_head_deque(nullptr)
 { }
 
@@ -165,6 +166,8 @@ inline size_t worker<T>::predict_page_size() const
 	d += alignof(T) + sizeof(T) * m_taskgraph_degree;
 	d *= m_taskgraph_height;
 
+	Debug() << c+d;
+
 	return c + d;
 }
 
@@ -224,7 +227,7 @@ template <typename T>
 task<T> *worker<T>::steal_rnd_task(task_deque<T> **victim)
 {
 	auto i = xorshift_rand() % m_ncollegues;
-	auto h = m_collegues[i].w->m_head_deque;
+	auto h = m_collegues[i].head;
 
 	bool was_empty;
 	bool was_null;
@@ -252,7 +255,6 @@ task<T> *worker<T>::steal_rnd_task(task_deque<T> **victim)
 		return nullptr;
 	}
 
-	Debug() << "aa``";
 	return nullptr;
 }
 
@@ -301,6 +303,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 	while (true) { // Local tasks loop
 		if (t) {
+			if (!tail->get_next())
 			// XXX: porbably instuction cache-miss is caused by 
 			// the following call
 			grow_tail(tail);
