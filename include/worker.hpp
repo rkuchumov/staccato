@@ -22,11 +22,7 @@ public:
 	worker(size_t taskgraph_degree, size_t taskgraph_height);
 	~worker();
 
-	void async_init(
-		size_t id,
-		size_t nworkers,
-		worker<T> **workers
-	);
+	void async_init(worker<T> *victim = nullptr);
 
 	void join();
 
@@ -34,7 +30,7 @@ public:
 
 	void local_loop(task_deque<T> *tail);
 
-	void steal_loop(task_deque<T> *tail);
+	void steal_loop();
 
 	T *root_allocate();
 	void root_commit();
@@ -43,25 +39,13 @@ public:
 private:
     inline size_t predict_page_size() const;
 
-	void init(
-		size_t id,
-		size_t nworkers,
-		worker<T> **workers
-	);
+	void init(worker<T> *victim);
 
-	void wait_collegues_init();
+	void sync_with_victim();
 
     void grow_tail(task_deque<T> *tail);
 
-    task<T> *steal_rnd_task(task_deque<T> **victim);
-
-	struct collegue_t {
-		worker<T> *w;
-		task_deque<T> *head;
-		task_deque<T> *tail;
-		size_t level;
-	};
-
+	// TODO: pass this as template parameteres 
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
 
@@ -73,8 +57,9 @@ private:
 
 	std::atomic_bool m_ready;
 
-	size_t m_ncollegues;
-	collegue_t *m_collegues;
+	worker<T> *m_victim;
+
+	task_deque<T> *m_victim_head;
 
 	task_deque<T> *m_head_deque;
 };
@@ -98,49 +83,32 @@ worker<T>::~worker()
 }
 
 template <typename T>
-void worker<T>::async_init(
-	size_t id,
-	size_t nworkers,
-	worker<T> **workers
-) {
+void worker<T>::async_init(worker<T> *victim)
+{
 	// TODO: use sync barrier
 
-	if (id == 0) {
-		init(id, nworkers, workers);
+	if (!victim) {
+		init(nullptr);
 		m_ready = true;
-		wait_collegues_init();
+		sync_with_victim();
 		return;
 	}
 
 	m_thread = new std::thread([=] {
-			init(id, nworkers, workers);
+			init(victim);
 			m_ready = true;
-			wait_collegues_init();
-			steal_loop(m_head_deque);
+			sync_with_victim();
+			steal_loop();
 		}
 	);
 }
 
 template <typename T>
-void worker<T>::init(
-	size_t id,
-	size_t nworkers,
-	worker<T> **workers
-) {
-	m_ncollegues = nworkers - 1;
+void worker<T>::init(worker<T> *victim)
+{
+	m_victim = victim;
 
 	m_allocator = new lifo_allocator(predict_page_size());
-
-	m_collegues = m_allocator->alloc_array<collegue_t>(m_ncollegues);
-	new(m_collegues) collegue_t[m_ncollegues];
-
-	for (size_t i = 0, j = 0; i < nworkers; ++i) {
-		if (i == id)
-			continue;
-
-		m_collegues[j].w = workers[i];
-		++j;
-	}
 
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
@@ -158,29 +126,32 @@ void worker<T>::init(
 template <typename T>
 inline size_t worker<T>::predict_page_size() const
 {
-	size_t c = 0;
-	c += alignof(collegue_t) + sizeof(collegue_t) * m_ncollegues;
-
-	size_t d = 0;
-	d += alignof(task_deque<T>) + sizeof(task_deque<T>);
-	d += alignof(T) + sizeof(T) * m_taskgraph_degree;
-	d *= m_taskgraph_height;
-
-	Debug() << c+d;
-
-	return c + d;
+	size_t s = 0;
+	s += alignof(task_deque<T>) + sizeof(task_deque<T>);
+	s += alignof(T) + sizeof(T) * m_taskgraph_degree;
+	s *= m_taskgraph_height;
+	return s;
 }
 
 template <typename T>
-void worker<T>::wait_collegues_init()
+void worker<T>::sync_with_victim()
 {
-	for (size_t i = 0; i < m_ncollegues; ++i) {
-		while (!m_collegues[i].w->m_ready)
-			std::this_thread::yield();
+	if (!m_victim)
+		return;
 
-		// TODO: move it to other function?
-		m_collegues[i].head = m_collegues[i].w->m_head_deque;
-		m_collegues[i].level = std::numeric_limits<std::size_t>::max();
+	// TODO: there's a right way of doing this 
+	while (!m_victim->m_ready)
+		std::this_thread::yield();
+
+	auto h = m_head_deque;
+	m_victim_head = m_victim->m_head_deque;
+	auto p = m_victim_head;
+
+	while (h && p) {
+		h->set_victim(p);
+
+		p = p->get_next();
+		h = h->get_next();
 	}
 }
 
@@ -224,74 +195,31 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 }
 
 template <typename T>
-task<T> *worker<T>::steal_rnd_task(task_deque<T> **victim)
+void worker<T>::steal_loop()
 {
-	auto i = xorshift_rand() % m_ncollegues;
-	auto h = m_collegues[i].head;
+	auto vtail = m_victim_head;
 
-	bool was_empty;
-	bool was_null;
+	while (!load_relaxed(m_joined)) { // Local tasks loop
+		bool was_null = false;
+		bool was_empty = false;
 
-	while (h) {
-		was_empty = true;
-		was_null = true;
-
-		auto t = h->steal(&was_empty, &was_empty);
+		auto t = vtail->steal(&was_empty, &was_null);
 
 		if (t) {
-			*victim = h;
-			return t;
-		}
-
-		if (was_null)
-		{
-			h = h->get_prev();
-			return nullptr;
-		}
-
-		if (was_empty)
-			h = h->get_next();
-
-		return nullptr;
-	}
-
-	return nullptr;
-}
-
-// template <typename T>
-// task_deque<T> *worker<T>::min_level_victim() const
-// {
-// 	size_t min_level = std::numeric_limits<std::size_t>::max();
-// 	task_deque<T> *t = nullptr;
-// 	for (size_t i = 0; i < m_ncollegues; ++i) {
-// 		if (m_collegues[i].level > min_level)
-// 			continue;
-//
-// 		min_level = m_collegues[i].level;
-// 		t = m_collegues[i].head;
-// 	}
-//
-// 	return t;
-// }
-//
-
-template <typename T>
-void worker<T>::steal_loop(task_deque<T> *tail)
-{
-	while (!load_relaxed(m_joined)) { // Local tasks loop
-		task_deque<T> *victim = nullptr;
-		auto t = steal_rnd_task(&victim);
-
-		if (!t)
+			t->process(this, m_head_deque);
+			vtail->return_stolen();
 			continue;
+		}
 
-		// XXX: porbably instuction cache-miss is caused by 
-		// the following call
-		grow_tail(tail);
+		if (was_empty) {
+			if (vtail->get_next())
+				vtail = vtail->get_next();
+		}
 
-		t->process(this, tail->get_next(), tail->get_level());
-
-		victim->return_stolen();
+		if (was_null) {
+			if (vtail->get_prev())
+				vtail = vtail->get_prev();
+		}
 	}
 }
 
@@ -308,7 +236,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 			// the following call
 			grow_tail(tail);
 
-			t->process(this, tail->get_next(), tail->get_level());
+			t->process(this, tail->get_next());
 
 			if (victim) {
 				victim->return_stolen();
@@ -324,7 +252,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (!tail->have_stolen())
 			return;
 
-		t = steal_rnd_task(&victim);
+		// t = steal_rnd_task(&victim);
 	}
 }
 

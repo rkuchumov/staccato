@@ -21,7 +21,7 @@ public:
 		if (n <= 2) {
 
 			int a = 1;
-			for (int i = 0; i < 500; ++i) {
+			for (int i = 0; i < 1000; ++i) {
 				a += i;
 			}
 
@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 	}
 
 	{
-		scheduler<FibTask> sh(2, 2, n);
+		scheduler<FibTask> sh(4, 2, n);
 		sh.spawn(new(sh.root()) FibTask(n, &answer));
 		sh.wait();
 	}

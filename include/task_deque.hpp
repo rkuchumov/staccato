@@ -23,11 +23,13 @@ public:
 	task_deque(T *mem);
 	~task_deque();
 
-	void set_next(task_deque<T> *d);
 	void set_prev(task_deque<T> *d);
+	void set_next(task_deque<T> *d);
+	void set_victim(task_deque<T> *d);
 
-	task_deque<T> *get_next();
 	task_deque<T> *get_prev();
+	task_deque<T> *get_next();
+	task_deque<T> *get_victim();
 
 	bool have_stolen() const;
 	void return_stolen();
@@ -42,17 +44,14 @@ public:
 	T *steal(bool *was_empty, bool *was_null);
 
 	void set_level(size_t level);
-	size_t get_level() const;
 
 private:
 	T * m_array;
 
-	size_t m_level;
-
-	task_deque<T> *m_next;
 	task_deque<T> *m_prev;
+	task_deque<T> *m_next;
+	task_deque<T> *m_victim;
 
-	// TODO: use this instead of task::waiting 
 	STACCATO_ALIGN std::atomic_size_t m_nstolen;
 	STACCATO_ALIGN std::atomic<T *> m_top;
 	STACCATO_ALIGN std::atomic<T *> m_bottom;
@@ -61,14 +60,20 @@ private:
 template <typename T>
 task_deque<T>::task_deque(T *mem)
 : m_array(mem)
-, m_level(0)
-, m_next(nullptr)
 , m_prev(nullptr)
+, m_next(nullptr)
+, m_victim(nullptr)
 { }
 
 template <typename T>
 task_deque<T>::~task_deque()
 { }
+
+template <typename T>
+void task_deque<T>::set_prev(task_deque<T> *d)
+{
+	m_prev = d;
+}
 
 template <typename T>
 void task_deque<T>::set_next(task_deque<T> *d)
@@ -77,9 +82,15 @@ void task_deque<T>::set_next(task_deque<T> *d)
 }
 
 template <typename T>
-void task_deque<T>::set_prev(task_deque<T> *d)
+void task_deque<T>::set_victim(task_deque<T> *d)
 {
-	m_prev = d;
+	m_victim = d;
+}
+
+template <typename T>
+task_deque<T> *task_deque<T>::get_prev()
+{
+	return m_prev;
 }
 
 template <typename T>
@@ -89,9 +100,9 @@ task_deque<T> *task_deque<T>::get_next()
 }
 
 template <typename T>
-task_deque<T> *task_deque<T>::get_prev()
+task_deque<T> *task_deque<T>::get_victim()
 {
-	return m_prev;
+	return m_victim;
 }
 
 template <typename T>
@@ -194,18 +205,6 @@ template <typename T>
 bool task_deque<T>::null() const
 {
 	return load_relaxed(m_top) == nullptr;
-}
-
-template <typename T>
-void task_deque<T>::set_level(size_t level)
-{
-	m_level = level;
-}
-
-template <typename T>
-size_t task_deque<T>::get_level() const
-{
-	return m_level;
 }
 
 } // namespace internal

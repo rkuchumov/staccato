@@ -32,7 +32,7 @@ public:
 
 	void wait();
 	
-	void process(internal::worker<T> *worker, internal::task_deque<T> *tail, size_t level);
+	void process(internal::worker<T> *worker, internal::task_deque<T> *tail);
 
 private:
 	internal::worker<T> *m_worker;
@@ -49,12 +49,11 @@ task<T>::~task()
 { }
 
 template <typename T>
-void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail, size_t level)
+void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail)
 {
 	m_worker = worker;
 	m_tail = tail;
 
-	m_tail->set_level(level + 1);
 	m_tail->set_null(false);
 
 	execute();

@@ -75,8 +75,9 @@ void scheduler<T>::create_workers(size_t taskgraph_degree, size_t taskgraph_heig
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i] = new worker<T>(taskgraph_degree, taskgraph_height);
 
-	for (int i = m_nworkers - 1; i >= 0; --i)
-		m_workers[i]->async_init(i, m_nworkers, m_workers);
+	for (int i = m_nworkers - 1; i >= 1; --i)
+		m_workers[i]->async_init(m_workers[i - 1]);
+	m_workers[0]->async_init(nullptr);
 }
 
 template <typename T>
