@@ -26,24 +26,13 @@ set(CMAKE_CXX_STANDARD 11)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-set(sources
-	"src/scheduler.cpp"
-	"src/task.cpp"
-	"src/task_deque.cpp"
-	"src/worker.cpp"
-)
-
-add_library(staccato SHARED ${sources})
-target_link_libraries(staccato pthread)
-
-install(TARGETS staccato DESTINATION lib)
-
 set(HEADERS
 	include/constants.hpp
 	include/scheduler.hpp
 	include/task.hpp
 	include/task_deque.hpp
 	include/worker.hpp
+	include/utils.hpp
 )
 
 install(

@@ -22,7 +22,7 @@ public:
 	worker(size_t taskgraph_degree, size_t taskgraph_height);
 	~worker();
 
-	void async_init(worker<T> *victim = nullptr);
+	void async_init(bool is_master, size_t core_id, worker<T> *victim);
 
 	void join();
 
@@ -39,11 +39,15 @@ public:
 private:
     inline size_t predict_page_size() const;
 
-	void init(worker<T> *victim);
+	void init(size_t core_id, worker<T> *victim);
+
+	void pin_thread(size_t core_id);
 
 	void sync_with_victim();
 
     void grow_tail(task_deque<T> *tail);
+
+    task<T> *steal_task(task_deque<T> *tail, task_deque<T> **victim);
 
 	// TODO: pass this as template parameteres 
 	const size_t m_taskgraph_degree;
@@ -60,6 +64,8 @@ private:
 	worker<T> *m_victim;
 
 	task_deque<T> *m_victim_head;
+
+	task_deque<T> *m_victim_tail;
 
 	task_deque<T> *m_head_deque;
 };
@@ -83,19 +89,18 @@ worker<T>::~worker()
 }
 
 template <typename T>
-void worker<T>::async_init(worker<T> *victim)
+void worker<T>::async_init(bool is_master, size_t core_id, worker<T> *victim)
 {
 	// TODO: use sync barrier
 
-	if (!victim) {
-		init(nullptr);
+	if (is_master) {
+		init(core_id, victim);
 		m_ready = true;
-		sync_with_victim();
 		return;
 	}
 
 	m_thread = new std::thread([=] {
-			init(victim);
+			init(core_id, victim);
 			m_ready = true;
 			sync_with_victim();
 			steal_loop();
@@ -104,8 +109,10 @@ void worker<T>::async_init(worker<T> *victim)
 }
 
 template <typename T>
-void worker<T>::init(worker<T> *victim)
+void worker<T>::init(size_t core_id, worker<T> *victim)
 {
+	pin_thread(core_id);
+
 	m_victim = victim;
 
 	m_allocator = new lifo_allocator(predict_page_size());
@@ -118,9 +125,26 @@ void worker<T>::init(worker<T> *victim)
 	m_head_deque = d;
 
 	for (size_t i = 1; i < m_taskgraph_height; ++i) {
-		grow_tail(d);
-		d = d->get_next();
+		auto n = m_allocator->alloc<task_deque<T>>();
+		auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
+		new(n) task_deque<T>(t);
+
+		n->set_prev(d);
+		d->set_next(n);
+
+		d = n;
 	}
+}
+
+template <typename T>
+void worker<T>::pin_thread(size_t core_id)
+{
+	cpu_set_t cpuset;
+	CPU_ZERO(&cpuset);
+	CPU_SET(core_id, &cpuset);
+
+	pthread_t current_thread = pthread_self();    
+	pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
 }
 
 template <typename T>
@@ -139,7 +163,7 @@ void worker<T>::sync_with_victim()
 	if (!m_victim)
 		return;
 
-	// TODO: there's a right way of doing this 
+	// TODO: use conditiona variables maybe?
 	while (!m_victim->m_ready)
 		std::this_thread::yield();
 
@@ -153,6 +177,8 @@ void worker<T>::sync_with_victim()
 		p = p->get_next();
 		h = h->get_next();
 	}
+
+	m_victim_tail = p;
 }
 
 template <typename T>
@@ -192,6 +218,16 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 
 	d->set_prev(tail);
 	tail->set_next(d);
+
+	if (!m_victim_tail)
+		return;
+
+	auto v = m_victim_tail->get_next();
+	if (!v) 
+		return;
+
+	d->set_victim(v);
+	m_victim_tail = v;
 }
 
 template <typename T>
@@ -199,7 +235,7 @@ void worker<T>::steal_loop()
 {
 	auto vtail = m_victim_head;
 
-	while (!load_relaxed(m_joined)) { // Local tasks loop
+	while (!load_relaxed(m_joined)) {
 		bool was_null = false;
 		bool was_empty = false;
 
@@ -211,15 +247,13 @@ void worker<T>::steal_loop()
 			continue;
 		}
 
-		if (was_empty) {
+		if (was_empty)
 			if (vtail->get_next())
 				vtail = vtail->get_next();
-		}
 
-		if (was_null) {
+		if (was_null)
 			if (vtail->get_prev())
 				vtail = vtail->get_prev();
-		}
 	}
 }
 
@@ -231,9 +265,6 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 	while (true) { // Local tasks loop
 		if (t) {
-			if (!tail->get_next())
-			// XXX: porbably instuction cache-miss is caused by 
-			// the following call
 			grow_tail(tail);
 
 			t->process(this, tail->get_next());
@@ -252,8 +283,28 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (!tail->have_stolen())
 			return;
 
-		// t = steal_rnd_task(&victim);
+		t = steal_task(tail, &victim);
 	}
+}
+
+template <typename T>
+task<T> *worker<T>::steal_task(task_deque<T> *tail, task_deque<T> **victim)
+{
+	auto v = tail->get_victim();
+	if (!v)
+		return nullptr;
+
+	bool was_null = false;
+	bool was_empty = false;
+
+	auto t = v->steal(&was_empty, &was_null);
+
+	if (t) {
+		*victim = v;
+		return t;
+	}
+
+	return nullptr;
 }
 
 }

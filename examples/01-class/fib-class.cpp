@@ -19,13 +19,7 @@ public:
 
 	void execute() {
 		if (n <= 2) {
-
-			int a = 1;
-			for (int i = 0; i < 1000; ++i) {
-				a += i;
-			}
-
-			*sum = a;
+			*sum = 1;
 			return;
 		}
 
@@ -58,6 +52,10 @@ int main(int argc, char *argv[])
 
 	{
 		scheduler<FibTask> sh(4, 2, n);
+		// scheduler<FibTask> sh(4, 2, n,
+		// 	{{0, -1}, {1, 0}, {2, 0}, {3, 1}});
+		// scheduler<FibTask> sh(4, 2, n,
+		// 	{{0, -1}, {1, 0}, {2, 0}, {3, 0}});
 		sh.spawn(new(sh.root()) FibTask(n, &answer));
 		sh.wait();
 	}

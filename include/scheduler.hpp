@@ -4,10 +4,15 @@
 #include <cstdlib>
 #include <thread>
 #include <atomic>
+#include <vector>
 #include <functional>
+
+// TODO: check if present
+#include <pthread.h>
 
 #include "constants.hpp"
 #include "worker.hpp"
+
 
 namespace staccato
 {
@@ -19,10 +24,13 @@ template <typename T>
 class scheduler
 {
 public:
+	typedef const std::vector<std::pair<size_t, int>> &affinity_t;
+
 	scheduler(
 		size_t nworkers,
 		size_t taskgraph_degree,
-		size_t taskgraph_height = 1
+		size_t taskgraph_height = 1,
+		affinity_t &affinity_map = {}
 	);
 
 	~scheduler();
@@ -32,7 +40,10 @@ public:
 	void wait();
 
 private:
-	void create_workers(size_t taskgraph_degree, size_t taskgraph_height);
+	void create_workers(
+		size_t taskgraph_degree,
+		size_t taskgraph_height,
+		affinity_t affinity_map);
 
 	enum state_t { 
 		terminated,
@@ -51,7 +62,8 @@ template <typename T>
 scheduler<T>::scheduler(
 	size_t nworkers,
 	size_t taskgraph_degree,
-	size_t taskgraph_height
+	size_t taskgraph_height,
+	affinity_t affinity_map
 )
 : m_nworkers(nworkers)
 , m_state(state_t::terminated)
@@ -61,23 +73,38 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
-	create_workers(taskgraph_degree, taskgraph_height);
+	create_workers(taskgraph_degree, taskgraph_height, affinity_map);
 
 	m_state = state_t::initialized;
 }
 
 template <typename T>
-void scheduler<T>::create_workers(size_t taskgraph_degree, size_t taskgraph_height)
-{
+void scheduler<T>::create_workers(
+	size_t taskgraph_degree,
+	size_t taskgraph_height,
+	affinity_t affinity_map
+) {
 	using namespace internal;
 
 	m_workers = new worker<T> *[m_nworkers];
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i] = new worker<T>(taskgraph_degree, taskgraph_height);
 
-	for (int i = m_nworkers - 1; i >= 1; --i)
-		m_workers[i]->async_init(m_workers[i - 1]);
-	m_workers[0]->async_init(nullptr);
+	if (affinity_map.size() != m_nworkers) {
+		m_workers[0]->async_init(true, 0, nullptr);
+		for (size_t i = 1; i < m_nworkers; ++i)
+			m_workers[i]->async_init(false, i, m_workers[i - 1]);
+		return;
+	} 
+
+	for (size_t i = 0; i < m_nworkers; ++i) {
+		auto victim = affinity_map[i].second;
+		auto core = affinity_map[i].first;
+		if (victim < 0)
+			m_workers[i]->async_init(i == 0, core, nullptr);
+		else
+			m_workers[i]->async_init(i == 0, core, m_workers[victim]);
+	}
 }
 
 template <typename T>
