@@ -9,7 +9,7 @@ using namespace std;
 using namespace chrono;
 using namespace staccato;
 
-class FibTask: public task
+class FibTask: public task<FibTask>
 {
 public:
 	FibTask (int n_, unsigned long *sum_): n(n_), sum(sum_)
@@ -54,12 +54,11 @@ int main(int argc, char *argv[])
 
 	auto start = system_clock::now();
 
-	scheduler::initialize(sizeof(FibTask));
-
-	scheduler::spawn(new(scheduler::root()) FibTask(n, &answer));
-	scheduler::wait();
-
-	scheduler::terminate();
+	{
+		scheduler<FibTask> sh(nthreads, 2);
+		sh.spawn(new(sh.root()) FibTask(n, &answer));
+		sh.wait();
+	}
 
 	auto stop = system_clock::now();
 

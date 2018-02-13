@@ -10,7 +10,7 @@ using namespace std;
 using namespace chrono;
 using namespace staccato;
 
-class DFSTask: public task
+class DFSTask: public task<DFSTask>
 {
 public:
 	DFSTask (size_t depth_, size_t breadth_, unsigned long *sum_)
@@ -63,12 +63,11 @@ int main(int argc, char *argv[])
 
 	auto start = system_clock::now();
 
-	scheduler::initialize(sizeof(DFSTask), nthreads);
-
-	scheduler::spawn(new(scheduler::root()) DFSTask(depth, breadth, &answer));
-	scheduler::wait();
-
-	scheduler::terminate();
+	{
+		scheduler<DFSTask> sh(nthreads, breadth);
+		sh.spawn(new(sh.root()) DFSTask(depth, breadth, &answer));
+		sh.wait();
+	}
 
 	auto stop = system_clock::now();
 

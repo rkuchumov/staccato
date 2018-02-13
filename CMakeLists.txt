@@ -31,6 +31,7 @@ set(HEADERS
 	include/scheduler.hpp
 	include/task.hpp
 	include/task_deque.hpp
+	include/lifo_allocator.hpp
 	include/worker.hpp
 	include/utils.hpp
 )
