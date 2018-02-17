@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
 
 	auto stop = system_clock::now();
 
-	cout << "Scheduler:  staccato\n";
+	cout << "Scheduler:  tbb\n";
 	cout << "Benchmark:  matmul\n";
 	cout << "Threads:    " << nthreads << "\n";
 	cout << "Time(us):   " << duration_cast<microseconds>(stop - start).count() << "\n";
