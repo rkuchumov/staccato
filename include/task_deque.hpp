@@ -37,6 +37,8 @@ public:
 	bool null() const;
 	void set_null(bool null);
 
+	void reset();
+
 	T *put_allocate();
 	void put_commit();
 
@@ -63,6 +65,7 @@ task_deque<T>::task_deque(T *mem)
 , m_prev(nullptr)
 , m_next(nullptr)
 , m_victim(nullptr)
+, m_nstolen(0)
 { }
 
 template <typename T>
@@ -108,6 +111,8 @@ task_deque<T> *task_deque<T>::get_victim()
 template <typename T>
 T *task_deque<T>::put_allocate()
 {
+	ASSERT(!null(), "Allocate from null deque");
+
 	auto b = load_relaxed(m_bottom);
 	return b - 1;
 }
@@ -115,6 +120,8 @@ T *task_deque<T>::put_allocate()
 template <typename T>
 void task_deque<T>::put_commit()
 {
+	ASSERT(!null(), "Put into null deque");
+
 	auto b = load_relaxed(m_bottom);
 	atomic_fence_release();
 	store_relaxed(m_bottom, b + 1);
@@ -123,6 +130,8 @@ void task_deque<T>::put_commit()
 template <typename T>
 T *task_deque<T>::take()
 {
+	ASSERT(!null(), "Take from null deque");
+
 	auto b = dec_relaxed(m_bottom) - 1;
 	auto t = load_relaxed(m_top);
 
@@ -188,6 +197,13 @@ template <typename T>
 void task_deque<T>::return_stolen()
 {
 	dec_relaxed(m_nstolen);
+}
+
+template <typename T>
+void task_deque<T>::reset()
+{
+	store_relaxed(m_top, m_array + 1);
+	store_relaxed(m_bottom, m_array + 1);
 }
 
 template <typename T>

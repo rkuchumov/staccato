@@ -2,12 +2,12 @@
 #include <chrono>
 #include <thread>
 
-#include <staccato/task.hpp>
-#include <staccato/scheduler.hpp>
+#include <tbb/task.h>
+#include <tbb/task_scheduler_init.h>
 
 using namespace std;
 using namespace chrono;
-using namespace staccato;
+using namespace tbb;
 
 struct elem_t {
 	int x;
@@ -47,7 +47,7 @@ bool check() {
 	return sum_before == s;
 }
 
-class SortTask: public task<SortTask>
+class SortTask: public task
 {
 public:
 	SortTask (size_t left, size_t right)
@@ -55,18 +55,23 @@ public:
 	, m_right(right)
 	{ }
 
-	void execute() {
+	task *execute() {
 		if (m_right - m_left <= 1)
-			return;
+			return nullptr;
 
 		size_t mid = (m_left + m_right) / 2;
 		size_t l = m_left;
 		size_t r = mid;
 
-		spawn(new(child()) SortTask(m_left, mid));
-		spawn(new(child()) SortTask(mid, m_right));
+		SortTask &a = *new(allocate_child()) SortTask(m_left, mid);
+		SortTask &b = *new(allocate_child()) SortTask(mid, m_right);
 
-		wait();
+		set_ref_count(3);
+
+		spawn(a);
+		spawn(b);
+
+		wait_for_all();
 
 		for (size_t i = m_left; i < m_right; i++) {
 			if ((l < mid && r < m_right && data[l].x < data[r].x) || r == m_right) {
@@ -81,6 +86,8 @@ public:
 		// TODO: prefetch?
 		for (size_t i = m_left; i < m_right; ++i)
 			data[i].x = data[i].t;
+
+		return nullptr;
 	}
 
 private:
@@ -104,11 +111,13 @@ int main(int argc, char *argv[])
 
 	auto start = system_clock::now();
 
-	{
-		scheduler<SortTask> sh(nthreads, 2);
-		sh.spawn(new(sh.root()) SortTask(0, n));
-		sh.wait();
-	}
+	task_scheduler_init scheduler(nthreads);
+
+	auto root = new(task::allocate_root()) SortTask(0, n);
+
+	task::spawn_root_and_wait(*root);
+
+	scheduler.terminate();
 
 	auto stop = system_clock::now();
 

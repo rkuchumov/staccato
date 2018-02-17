@@ -2,12 +2,11 @@
 #include <chrono>
 #include <thread>
 
-#include <staccato/task.hpp>
-#include <staccato/scheduler.hpp>
+#include <cilk/cilk.h>
+#include <cilk/cilk_api.h> 
 
 using namespace std;
 using namespace chrono;
-using namespace staccato;
 
 struct elem_t {
 	int x;
@@ -47,68 +46,68 @@ bool check() {
 	return sum_before == s;
 }
 
-class SortTask: public task<SortTask>
-{
-public:
-	SortTask (size_t left, size_t right)
-	: m_left(left)
-	, m_right(right)
-	{ }
+void mergesort(size_t left, size_t right) {
+	if (right - left <= 1)
+		return;
 
-	void execute() {
-		if (m_right - m_left <= 1)
-			return;
+	size_t mid = (left + right) / 2;
+	size_t l = left;
+	size_t r = mid;
 
-		size_t mid = (m_left + m_right) / 2;
-		size_t l = m_left;
-		size_t r = mid;
+	cilk_spawn mergesort(left, mid);
+	cilk_spawn mergesort(mid, right);
 
-		spawn(new(child()) SortTask(m_left, mid));
-		spawn(new(child()) SortTask(mid, m_right));
+	cilk_sync;
 
-		wait();
-
-		for (size_t i = m_left; i < m_right; i++) {
-			if ((l < mid && r < m_right && data[l].x < data[r].x) || r == m_right) {
-				data[i].t = data[l].x;
-				l++;
-			} else if ((l < mid && r < m_right) || l == mid) {
-				data[i].t = data[r].x;
-				r++;
-			}
+	for (size_t i = left; i < right; i++) {
+		if ((l < mid && r < right && data[l].x < data[r].x) || r == right) {
+			data[i].t = data[l].x;
+			l++;
+		} else if ((l < mid && r < right) || l == mid) {
+			data[i].t = data[r].x;
+			r++;
 		}
-
-		// TODO: prefetch?
-		for (size_t i = m_left; i < m_right; ++i)
-			data[i].x = data[i].t;
 	}
 
-private:
-	size_t m_left;
-	size_t m_right;
-};
+	// TODO: prefetch?
+	for (size_t i = left; i < right; ++i)
+		data[i].x = data[i].t;
+
+}
+void test(size_t left, size_t right)
+{
+	cilk_spawn mergesort(left, right);
+	cilk_sync;
+}
 
 int main(int argc, char *argv[])
 {
 	size_t n = 8e7;
-	size_t nthreads = 0;
+	const char *nthreads = nullptr;
 
 	if (argc >= 2)
-		nthreads = atoi(argv[1]);
+		nthreads = argv[1];
 	if (argc >= 3)
 		n = atoi(argv[2]);
 	if (nthreads == 0)
-		nthreads = thread::hardware_concurrency();
+		nthreads = to_string(thread::hardware_concurrency()).c_str();
 
 	generate_data(n);
 
+	__cilkrts_end_cilk(); 
+
 	auto start = system_clock::now();
 
-	{
-		scheduler<SortTask> sh(nthreads, 2);
-		sh.spawn(new(sh.root()) SortTask(0, n));
-		sh.wait();
+	if (__cilkrts_set_param("nworkers", nthreads) != 0) {
+		cerr << "Failed to set worker count\n";
+		exit(EXIT_FAILURE);
 	}
+
+	__cilkrts_init();
+
+	test(0, n);
+
+	__cilkrts_end_cilk(); 
 
 	auto stop = system_clock::now();
 

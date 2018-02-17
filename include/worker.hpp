@@ -78,6 +78,7 @@ worker<T>::worker(size_t taskgraph_degree, size_t taskgraph_height)
 , m_thread(nullptr)
 , m_joined(false)
 , m_ready(false)
+, m_victim_tail(nullptr)
 , m_head_deque(nullptr)
 { }
 
@@ -283,7 +284,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (!tail->have_stolen())
 			return;
 
-		t = steal_task(tail, &victim);
+		// t = steal_task(tail, &victim);
 	}
 }
 

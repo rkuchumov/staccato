@@ -58,6 +58,8 @@ void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail
 
 	execute();
 
+	// ASSERT(!m_tail->have_stolen(), "Finished with stolen tasks");
+
 	m_tail->set_null(true);
 }
 
@@ -77,6 +79,9 @@ template <typename T>
 void task<T>::wait()
 {
 	m_worker->local_loop(m_tail);
+	// ASSERT(!m_tail->have_stolen(), "Finished with stolen tasks");
+
+	m_tail->reset();
 }
 
 } /* staccato */ 
