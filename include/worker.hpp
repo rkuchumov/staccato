@@ -276,14 +276,12 @@ void worker<T>::local_loop(task_deque<T> *tail)
 			}
 		}
 
-		bool was_stolen = false;
-
-		t = tail->take(&was_stolen);
+		t = tail->take();
 
 		if (t)
 			continue;
 
-		if (!was_stolen && !tail->have_stolen())
+		if (!tail->have_stolen())
 			return;
 
 		t = steal_task(tail, &victim);

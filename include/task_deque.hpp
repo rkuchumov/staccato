@@ -42,7 +42,7 @@ public:
 	T *put_allocate();
 	void put_commit();
 
-	T *take(bool *was_stolen);
+	T *take();
 	T *steal(bool *was_empty, bool *was_null);
 
 	void set_level(size_t level);
@@ -128,7 +128,7 @@ void task_deque<T>::put_commit()
 }
 
 template <typename T>
-T *task_deque<T>::take(bool *was_stolen)
+T *task_deque<T>::take()
 {
 	ASSERT(!null(), "Take from null deque");
 
@@ -148,7 +148,6 @@ T *task_deque<T>::take(bool *was_stolen)
 		if (!cas_strong(m_top, t, t + 1)) {
 			// It was stolen, restoring to previous state
 			m_bottom = b + 1;
-			*was_stolen = true;
 			return nullptr;
 		}
 
@@ -179,11 +178,13 @@ T *task_deque<T>::steal(bool *was_empty, bool *was_null)
 		return nullptr;
 	}
 
-	// Check if loaded task is not stolen
-	if (!cas_weak(m_top, t, t + 1))
-		return nullptr;
-
 	inc_relaxed(m_nstolen);
+
+	// Check if loaded task is not stolen
+	if (!cas_weak(m_top, t, t + 1)) {
+		dec_relaxed(m_nstolen);
+		return nullptr;
+	}
 
 	return t - 1;
 }
