@@ -202,6 +202,8 @@ void task_deque<T>::return_stolen()
 template <typename T>
 void task_deque<T>::reset()
 {
+	ASSERT(!have_stolen(), "Resetting when some tasks are stolen");
+
 	store_relaxed(m_top, m_array + 1);
 	store_relaxed(m_bottom, m_array + 1);
 }
@@ -209,6 +211,8 @@ void task_deque<T>::reset()
 template <typename T>
 void task_deque<T>::set_null(bool null)
 {
+	ASSERT(!have_stolen(), "Changing null state when some tasks are stolen");
+
 	if (null) {
 		store_relaxed(m_top, nullptr);
 	} else {

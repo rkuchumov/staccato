@@ -31,6 +31,7 @@ function bench() {
 
 	cd $dir
 
+	rm -rf build
 	if [ -d build ]; then
 		cd build
 	else
@@ -50,22 +51,22 @@ function bench() {
 runs=1
 threads=4
 
-bench $runs cilk fib "$threads 30"
-bench $runs cilk dfs "$threads 7 7"
-bench $runs cilk mergesort "$threads 10000000"
-bench $runs cilk matmul "$threads 1000"
-bench $runs cilk blkmul "$threads 6"
-
-bench $runs tbb fib "$threads 30"
-bench $runs tbb dfs "$threads 7 7"
-bench $runs tbb mergesort "$threads 10000000"
-bench $runs tbb matmul "$threads 1"
-bench $runs tbb blkmul "$threads 6"
+# bench $runs cilk fib "$threads 30"
+# bench $runs cilk dfs "$threads 7 7"
+# bench $runs cilk mergesort "$threads 10000000"
+# bench $runs cilk matmul "$threads 1000"
+# bench $runs cilk blkmul "$threads 6"
+#
+# bench $runs tbb fib "$threads 30"
+# bench $runs tbb dfs "$threads 7 7"
+# bench $runs tbb mergesort "$threads 10000000"
+# bench $runs tbb matmul "$threads 1"
+# bench $runs tbb blkmul "$threads 6"
 
 export CXXFLAGS=-I\ ~/.local/include/
 
-bench $runs staccato fib "$threads 30"
-bench $runs staccato dfs "$threads 7 7"
-bench $runs staccato mergesort "$threads 10000000"
-bench $runs staccato matmul "$threads 1"
-bench $runs staccato blkmul "$threads 6"
+bench $runs staccato fib "$threads 42"
+bench $runs staccato dfs "$threads 9 9"
+bench $runs staccato mergesort "$threads 80000000"
+bench $runs staccato matmul "$threads 3000"
+bench $runs staccato blkmul "$threads 8"
