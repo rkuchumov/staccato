@@ -56,9 +56,10 @@ void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail
 
 	m_tail->set_null(false);
 
+	ASSERT(!m_tail->have_stolen(), "Deque has stolen tasks before execution");
+
 	execute();
 
-	// ASSERT(false, "aa");
 	ASSERT(!m_tail->have_stolen(), "Finished with stolen tasks");
 
 	m_tail->set_null(true);

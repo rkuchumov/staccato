@@ -11,6 +11,7 @@
 #include <pthread.h>
 
 #include "constants.hpp"
+#include "utils.hpp"
 #include "worker.hpp"
 
 
@@ -68,6 +69,8 @@ scheduler<T>::scheduler(
 : m_nworkers(nworkers)
 , m_state(state_t::terminated)
 {
+	internal::Debug() << "Scheduler is working in debug mode";
+
 	m_state = state_t::initializing;
 
 	if (m_nworkers == 0)
