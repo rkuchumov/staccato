@@ -119,16 +119,15 @@ void worker<T>::init(size_t core_id, worker<T> *victim)
 	m_allocator = new lifo_allocator(predict_page_size());
 
 	auto d = m_allocator->alloc<task_deque<T>>();
-	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
-	new(d) task_deque<T>(t);
-	d->set_null(false);
+	auto t = m_allocator->alloc_array<T>(1 << m_taskgraph_degree);
+	new(d) task_deque<T>(m_taskgraph_degree, t);
 
 	m_head_deque = d;
 
-	for (size_t i = 1; i < m_taskgraph_height; ++i) {
+	for (size_t i = 1; i < m_taskgraph_height + 1; ++i) {
 		auto n = m_allocator->alloc<task_deque<T>>();
-		auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
-		new(n) task_deque<T>(t);
+		auto t = m_allocator->alloc_array<T>(1 << m_taskgraph_degree);
+		new(n) task_deque<T>(m_taskgraph_degree, t);
 
 		n->set_prev(d);
 		d->set_next(n);
@@ -214,8 +213,8 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 		return;
 
 	auto d = m_allocator->alloc<task_deque<T>>();
-	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
-	new(d) task_deque<T>(t);
+	auto t = m_allocator->alloc_array<T>(1 << m_taskgraph_degree);
+	new(d) task_deque<T>(m_taskgraph_degree, t);
 
 	d->set_prev(tail);
 	tail->set_next(d);
@@ -276,15 +275,17 @@ void worker<T>::local_loop(task_deque<T> *tail)
 			}
 		}
 
-		t = tail->take();
+		size_t nstolen = 0;
+
+		t = tail->take(&nstolen);
 
 		if (t)
 			continue;
 
-		if (!tail->have_stolen())
+		if (nstolen == 0)
 			return;
 
-		t = steal_task(tail, &victim);
+		// t = steal_task(tail, &victim);
 	}
 }
 

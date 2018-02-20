@@ -1,5 +1,5 @@
-#ifndef STACCATO_DEQUE_H
-#define STACCATO_DEQUE_H
+#ifndef TASK_DEQUE_HPP_1ZDWEADG
+#define TASK_DEQUE_HPP_1ZDWEADG
 
 #include <atomic>
 #include <cstddef>
@@ -15,12 +15,11 @@ namespace staccato
 namespace internal
 {
 
-// TODO: remame, it's not only a deque
 template <typename T>
 class task_deque
 {
 public:
-	task_deque(T *mem);
+	task_deque(size_t log_size, T *mem);
 	~task_deque();
 
 	void set_prev(task_deque<T> *d);
@@ -35,19 +34,17 @@ public:
 	void return_stolen();
 
 	bool null() const;
-	void set_null(bool null);
-
-	void reset();
 
 	T *put_allocate();
 	void put_commit();
 
-	T *take();
+	T *take(size_t *);
 	T *steal(bool *was_empty, bool *was_null);
 
-	void set_level(size_t level);
-
 private:
+	const size_t m_mask;
+
+	// TODO: make this array a part of this class
 	T * m_array;
 
 	task_deque<T> *m_prev;
@@ -55,17 +52,20 @@ private:
 	task_deque<T> *m_victim;
 
 	STACCATO_ALIGN std::atomic_size_t m_nstolen;
-	STACCATO_ALIGN std::atomic<T *> m_top;
-	STACCATO_ALIGN std::atomic<T *> m_bottom;
+	STACCATO_ALIGN std::atomic_size_t m_top;
+	STACCATO_ALIGN std::atomic_size_t m_bottom;
 };
 
 template <typename T>
-task_deque<T>::task_deque(T *mem)
-: m_array(mem)
+task_deque<T>::task_deque(size_t log_size, T *mem)
+: m_mask((1 << log_size) - 1)
+, m_array(mem)
 , m_prev(nullptr)
 , m_next(nullptr)
 , m_victim(nullptr)
 , m_nstolen(0)
+, m_top(1)
+, m_bottom(1)
 { }
 
 template <typename T>
@@ -111,34 +111,30 @@ task_deque<T> *task_deque<T>::get_victim()
 template <typename T>
 T *task_deque<T>::put_allocate()
 {
-	ASSERT(!null(), "Allocate from null deque");
-
 	auto b = load_relaxed(m_bottom);
-	return b - 1;
+	return &m_array[b & m_mask];
 }
 
 template <typename T>
 void task_deque<T>::put_commit()
 {
-	ASSERT(!null(), "Put into null deque");
-
 	auto b = load_relaxed(m_bottom);
 	atomic_fence_release();
 	store_relaxed(m_bottom, b + 1);
 }
 
 template <typename T>
-T *task_deque<T>::take()
+T *task_deque<T>::take(size_t *nstolen)
 {
-	ASSERT(!null(), "Take from null deque");
-
 	auto b = dec_relaxed(m_bottom) - 1;
 	auto t = load_relaxed(m_top);
+	auto n = load_relaxed(m_nstolen);
 
 	// Check whether the deque was empty
 	if (t > b) {
 		// Restoring to empty state
 		store_relaxed(m_bottom, b + 1);
+		*nstolen = n;
 		return nullptr;
 	}
 
@@ -148,35 +144,37 @@ T *task_deque<T>::take()
 		if (!cas_strong(m_top, t, t + 1)) {
 			// It was stolen, restoring to previous state
 			m_bottom = b + 1;
+			*nstolen = n + 1;
 			return nullptr;
 		}
 
 		// Wasn't stolen, but we icnremented top index
 		m_bottom = b + 1;
-		return b - 1;
+		return &m_array[b & m_mask];
 	}
 
 	// The task can't be stolen, no need for CAS
-	return b - 1;
+	return &m_array[b & m_mask];
 }
  
 template <typename T>
 T *task_deque<T>::steal(bool *was_empty, bool *was_null)
 {
 	auto t = load_acquire(m_top);
-	if (!t) {
-		*was_null = true;
-		return nullptr;
-	}
-
 	atomic_fence_seq_cst();
 	auto b = load_acquire(m_bottom);
+	auto n = load_relaxed(m_nstolen);
 
 	// Check if deque was empty
 	if (t >= b) {
-		*was_empty = true;
+		if (n > 0)
+			*was_empty = true;
+		else
+			*was_null = true;
 		return nullptr;
-	}
+	} 
+
+	auto r = &m_array[t & m_mask];
 
 	inc_relaxed(m_nstolen);
 
@@ -186,7 +184,7 @@ T *task_deque<T>::steal(bool *was_empty, bool *was_null)
 		return nullptr;
 	}
 
-	return t - 1;
+	return r;
 }
 
 template <typename T>
@@ -203,34 +201,19 @@ void task_deque<T>::return_stolen()
 }
 
 template <typename T>
-void task_deque<T>::reset()
-{
-	ASSERT(!have_stolen(), "Resetting when some tasks are stolen");
-
-	store_relaxed(m_top, m_array + 1);
-	store_relaxed(m_bottom, m_array + 1);
-}
-
-template <typename T>
-void task_deque<T>::set_null(bool null)
-{
-	ASSERT(!have_stolen(), "Changing null state when some tasks are stolen");
-
-	if (null) {
-		store_relaxed(m_top, nullptr);
-	} else {
-		store_relaxed(m_top, m_array + 1);
-		store_relaxed(m_bottom, m_array + 1);
-	}
-}
-
-template <typename T>
 bool task_deque<T>::null() const
 {
-	return load_relaxed(m_top) == nullptr;
+	auto b = load_acquire(m_bottom);
+	auto t = load_relaxed(m_top);
+	auto n = load_relaxed(m_nstolen);
+
+	if (t < b)
+		return false;
+
+	return n == 0;
 }
 
 } // namespace internal
 } // namespace stacccato
 
-#endif /* end of include guard: STACCATO_DEQUE_H */
+#endif /* end of include guard: TASK_DEQUE_HPP_1ZDWEADG */

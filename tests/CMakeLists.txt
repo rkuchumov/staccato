@@ -49,7 +49,11 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 function(my_add_test name sources)
 	add_executable(${name} ${sources})
-	target_link_libraries(${name} staccato gtest_main gtest gmock)
+
+	target_link_libraries(${name} pthread)
+	target_link_libraries(${name} atomic)
+
+	target_link_libraries(${name} gtest_main gtest gmock)
 	add_test(NAME ${name} COMMAND ${name})
 
 	find_program(VALGRIND "valgrind")

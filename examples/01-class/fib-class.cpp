@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
 	}
 
 	{
-		scheduler<FibTask> sh(4, 2, n);
+		scheduler<FibTask> sh(4, 2);
 		// scheduler<FibTask> sh(4, 2, n,
 		// 	{{0, -1}, {1, 0}, {2, 0}, {3, 1}});
 		// scheduler<FibTask> sh(4, 2, n,

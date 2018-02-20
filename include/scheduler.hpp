@@ -76,6 +76,9 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
+	// TODO: it should be log size
+	taskgraph_degree = internal::next_pow2(taskgraph_degree);
+
 	create_workers(taskgraph_degree, taskgraph_height, affinity_map);
 
 	m_state = state_t::initialized;

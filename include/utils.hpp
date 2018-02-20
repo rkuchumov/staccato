@@ -58,6 +58,23 @@ inline uint32_t xorshift_rand() {
 	return x;
 }
 
+inline bool is_pow2(uint64_t x) {
+	return x && !(x & (x - 1));
+}
+
+
+inline uint64_t next_pow2(uint64_t x)
+{
+	x--;
+	x |= (x >> 1);
+	x |= (x >> 2);
+	x |= (x >> 4);
+	x |= (x >> 8);
+	x |= (x >> 16);
+	x |= (x >> 32);
+	return x + 1;
+}
+
 class Debug
 {
 public:
