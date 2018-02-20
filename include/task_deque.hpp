@@ -30,9 +30,9 @@ public:
 	task_deque<T> *get_next();
 	task_deque<T> *get_victim();
 
-	bool have_stolen() const;
 	void return_stolen();
 
+	void set_null(bool n);
 	bool null() const;
 
 	T *put_allocate();
@@ -51,6 +51,7 @@ private:
 	task_deque<T> *m_next;
 	task_deque<T> *m_victim;
 
+	STACCATO_ALIGN std::atomic_bool m_null;
 	STACCATO_ALIGN std::atomic_size_t m_nstolen;
 	STACCATO_ALIGN std::atomic_size_t m_top;
 	STACCATO_ALIGN std::atomic_size_t m_bottom;
@@ -63,6 +64,7 @@ task_deque<T>::task_deque(size_t size, T *mem)
 , m_prev(nullptr)
 , m_next(nullptr)
 , m_victim(nullptr)
+, m_null(true)
 , m_nstolen(0)
 , m_top(1)
 , m_bottom(1)
@@ -169,10 +171,10 @@ T *task_deque<T>::steal(bool *was_empty, bool *was_null)
 
 	// Check if deque was empty
 	if (t >= b) {
-		if (n > 0)
-			*was_empty = true;
-		else
+		if (m_null)
 			*was_null = true;
+		else
+			*was_empty = true;
 		return nullptr;
 	} 
 
@@ -190,12 +192,6 @@ T *task_deque<T>::steal(bool *was_empty, bool *was_null)
 }
 
 template <typename T>
-bool task_deque<T>::have_stolen() const
-{
-	return load_relaxed(m_nstolen) > 0;
-}
-
-template <typename T>
 void task_deque<T>::return_stolen()
 {
 	ASSERT(m_nstolen > 0, "Decrementing stolen count when there are no stolen tasks");
@@ -203,16 +199,15 @@ void task_deque<T>::return_stolen()
 }
 
 template <typename T>
+void task_deque<T>::set_null(bool n)
+{
+	store_relaxed(m_null, n);
+}
+
+template <typename T>
 bool task_deque<T>::null() const
 {
-	auto b = load_acquire(m_bottom);
-	auto t = load_relaxed(m_top);
-	auto n = load_relaxed(m_nstolen);
-
-	if (t < b)
-		return false;
-
-	return n == 0;
+	return load_acquire(m_null);
 }
 
 } // namespace internal

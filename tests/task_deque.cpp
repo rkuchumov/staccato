@@ -52,6 +52,8 @@ TEST(steal, single) {
 	auto m = static_cast<task_mock *>(malloc(sizeof(task_mock) * ntasks));
 	auto set = new task_deque<task_mock>(3, m);
 
+	set->set_null(false);
+
 	for (size_t i = 1; i <= ntasks; ++i) {
 		new(set->put_allocate()) task_mock(i);
 		set->put_commit();

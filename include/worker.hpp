@@ -120,6 +120,7 @@ void worker<T>::init(size_t core_id, worker<T> *victim)
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
 	new(d) task_deque<T>(m_taskgraph_degree, t);
+	d->set_null(false);
 
 	m_head_deque = d;
 
@@ -241,18 +242,25 @@ void worker<T>::steal_loop()
 		auto t = vtail->steal(&was_empty, &was_null);
 
 		if (t) {
+			// Debug() << "stolen";
 			t->process(this, m_head_deque);
 			vtail->return_stolen();
 			continue;
 		}
 
 		if (was_empty)
+		{
+			// Debug() << "empty";
 			if (vtail->get_next())
 				vtail = vtail->get_next();
+		}
 
 		if (was_null)
+		{
+			// Debug() << "null";
 			if (vtail->get_prev())
 				vtail = vtail->get_prev();
+		}
 	}
 }
 

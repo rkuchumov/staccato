@@ -4,7 +4,7 @@ runs=2
 
 threads=(1 2 3 4)
 
-args_fib="30"
+args_fib="37"
 args_dfs="7 7"
 args_mergesort="800000"
 args_matmul="800"
@@ -110,7 +110,7 @@ function bench_all() {
 
 		for t in ${threads[@]} ; do
 			b=${benchmark/_threads_/$t}
-			bench $runs $b $a
+			bench $runs $b 
 		done
 	done
 }
