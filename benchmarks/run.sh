@@ -1,5 +1,30 @@
 #!/bin/bash
 
+runs=2
+
+threads=(1 2 3 4)
+
+args_fib="30"
+args_dfs="7 7"
+args_mergesort="800000"
+args_matmul="800"
+args_blkmul="6"
+
+benchmarks=(
+	"staccato fib _threads_ $args_fib"
+	"staccato dfs _threads_ $args_dfs"
+	"staccato mergesort _threads_ $args_mergesort"
+	"staccato matmul _threads_ $args_matmul"
+	"staccato blkmul _threads_ $args_blkmul"
+	"cilk fib _threads_ $args_fib"
+	"cilk dfs _threads_ $args_dfs"
+	"cilk mergesort _threads_ $args_mergesort"
+	"cilk matmul _threads_ $args_matmul"
+	"cilk blkmul _threads_ $args_blkmul"
+)
+
+export CXXFLAGS=-I\ ~/.local/include/
+
 function get_integer() {
 	echo "$1" | grep "$2" | grep -o "[0-9].*"
 }
@@ -21,25 +46,44 @@ function show_results() {
 	echo $sched $name $threads $time $input
 }
 
-function bench() {
-	runs=$1
-	dir=$2/$3
-	bin=${3}-${2}
-	args=$4
+function clean() {
+	dir=$1/$2/build
 
-	pushd . >/dev/null
+	if [ -d $dir ]; then
+		rm -rf $dir
+	fi
+}
+
+function build() {
+	dir=$1/$2
+
+	pushd .
 
 	cd $dir
 
-	rm -rf build
 	if [ -d build ]; then
 		cd build
 	else
 		mkdir build
 		cd build
 	fi
-	cmake $cmake_args .. >/dev/null
-	make >/dev/null
+
+	cmake $cmake_args ..
+	make
+
+	popd
+}
+
+function bench() {
+	runs=$1
+	dir=$2/$3/build/
+	bin=${3}-${2}
+	shift; shift; shift
+	args=$@
+
+	pushd . >/dev/null
+
+	cd $dir
 
 	for (( i = 0; i < $runs; i++ )); do
 		./$bin $args | show_results
@@ -48,25 +92,56 @@ function bench() {
 	popd >/dev/null
 }
 
-runs=1
-threads=4
+function clean_all() {
+	for b in "${benchmarks[@]}" ; do
+		clean $b
+	done
+}
 
-# bench $runs cilk fib "$threads 30"
-# bench $runs cilk dfs "$threads 7 7"
-# bench $runs cilk mergesort "$threads 10000000"
-# bench $runs cilk matmul "$threads 1000"
-# bench $runs cilk blkmul "$threads 6"
-#
-# bench $runs tbb fib "$threads 30"
-# bench $runs tbb dfs "$threads 7 7"
-# bench $runs tbb mergesort "$threads 10000000"
-# bench $runs tbb matmul "$threads 1"
-# bench $runs tbb blkmul "$threads 6"
+function build_all() {
+	for b in "${benchmarks[@]}" ; do
+		build $b
+	done
+}
 
-export CXXFLAGS=-I\ ~/.local/include/
+function bench_all() {
+	for id in "${!benchmarks[@]}" ; do
+		benchmark="${benchmarks[$id]}"
 
-bench $runs staccato fib "$threads 42"
-bench $runs staccato dfs "$threads 9 9"
-bench $runs staccato mergesort "$threads 80000000"
-bench $runs staccato matmul "$threads 3000"
-bench $runs staccato blkmul "$threads 8"
+		for t in ${threads[@]} ; do
+			b=${benchmark/_threads_/$t}
+			bench $runs $b $a
+		done
+	done
+}
+
+function install_staccato() {
+	pushd .
+	cd ..
+
+	rm -rf build || true
+	mkdir build
+	cd build
+	cmake -DCMAKE_INSTALL_PREFIX=~/.local/ ..
+	make
+	make install
+
+	popd
+}
+
+mode=$1
+if [[ z$mode == "zupdate" ]]; then
+	install_staccato
+	clean_all
+	build_all
+elif [[ z$mode == "zrebuild" ]]; then
+	clean_all
+	build_all
+elif [[ z$mode == "zbuild" ]]; then
+	build_all
+elif [[ z$mode == "zclean" ]]; then
+	clean_all
+else
+	bench_all
+fi
+

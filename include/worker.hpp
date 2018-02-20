@@ -212,7 +212,7 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 		return;
 
 	auto d = m_allocator->alloc<task_deque<T>>();
-	auto t = m_allocator->alloc_array<T>(1 << m_taskgraph_degree);
+	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
 	new(d) task_deque<T>(m_taskgraph_degree, t);
 
 	d->set_prev(tail);
