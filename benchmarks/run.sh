@@ -33,6 +33,10 @@ function get_string() {
 	echo "$1" | grep "$2" | cut -f2 -d':'
 }
 
+function print_header() {
+	echo sched name threads time input output
+}
+
 function show_results() {
 	output=$(cat /dev/stdin)
 
@@ -40,10 +44,10 @@ function show_results() {
 	name=$(get_string "$output" "Benchmark")
 	threads=$(get_integer "$output" "Threads")
 	time=$(get_integer "$output" "Time(us)")
-	time2=$(get_integer "$output" "Time(us)")
 	input=$(get_integer "$output" "Input")
+	output=$(get_integer "$output" "Output")
 
-	echo $sched $name $threads $time $input
+	echo $sched $name $threads $time \"$input\" \"$output\"
 }
 
 function clean() {
@@ -105,6 +109,7 @@ function build_all() {
 }
 
 function bench_all() {
+	print_header
 	for id in "${!benchmarks[@]}" ; do
 		benchmark="${benchmarks[$id]}"
 
