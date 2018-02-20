@@ -76,9 +76,6 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
-	// TODO: it should be log size
-	taskgraph_degree = internal::next_pow2(taskgraph_degree);
-
 	create_workers(taskgraph_degree, taskgraph_height, affinity_map);
 
 	m_state = state_t::initialized;
@@ -92,9 +89,10 @@ void scheduler<T>::create_workers(
 ) {
 	using namespace internal;
 
+	auto degree = next_pow2(taskgraph_degree);
 	m_workers = new worker<T> *[m_nworkers];
 	for (size_t i = 0; i < m_nworkers; ++i)
-		m_workers[i] = new worker<T>(taskgraph_degree, taskgraph_height);
+		m_workers[i] = new worker<T>(degree, taskgraph_height);
 
 	if (affinity_map.size() != m_nworkers) {
 		m_workers[0]->async_init(true, 0, nullptr);

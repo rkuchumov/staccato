@@ -18,7 +18,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
 	add_definitions(-DSTACCATO_DEBUG=1)
 	set(CMAKE_VERBOSE_MAKEFILE TRUE)
 elseif (CMAKE_BUILD_TYPE MATCHES Release)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
 	message("Release build.")
 endif ()
 

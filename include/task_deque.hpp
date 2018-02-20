@@ -19,7 +19,7 @@ template <typename T>
 class task_deque
 {
 public:
-	task_deque(size_t log_size, T *mem);
+	task_deque(size_t size, T *mem);
 	~task_deque();
 
 	void set_prev(task_deque<T> *d);
@@ -57,8 +57,8 @@ private:
 };
 
 template <typename T>
-task_deque<T>::task_deque(size_t log_size, T *mem)
-: m_mask((1 << log_size) - 1)
+task_deque<T>::task_deque(size_t size, T *mem)
+: m_mask(size - 1)
 , m_array(mem)
 , m_prev(nullptr)
 , m_next(nullptr)
@@ -66,7 +66,9 @@ task_deque<T>::task_deque(size_t log_size, T *mem)
 , m_nstolen(0)
 , m_top(1)
 , m_bottom(1)
-{ }
+{
+	ASSERT(is_pow2(size), "Deque size is not power of 2");
+}
 
 template <typename T>
 task_deque<T>::~task_deque()

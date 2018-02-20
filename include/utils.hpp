@@ -62,7 +62,6 @@ inline bool is_pow2(uint64_t x) {
 	return x && !(x & (x - 1));
 }
 
-
 inline uint64_t next_pow2(uint64_t x)
 {
 	x--;
