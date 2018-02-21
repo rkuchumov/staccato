@@ -43,7 +43,6 @@ public:
 
 private:
 	topology_t init_topology(
-		size_t nworkers,
 		size_t degree,
 		const topology_t &topology
 	);
@@ -83,7 +82,7 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
-	auto topo = init_topology(taskgraph_degree, nworkers, topology);
+	auto topo = init_topology(taskgraph_degree, topology);
 
 	create_workers(taskgraph_degree, taskgraph_height, topo);
 
@@ -92,11 +91,10 @@ scheduler<T>::scheduler(
 
 template <typename T>
 topology_t scheduler<T>::init_topology(
-	size_t nworkers,
 	size_t degree,
 	const topology_t &topology)
 {
-	if (topology.size() == nworkers)
+	if (topology.size() == m_nworkers)
 		return topology;
 	else if (!topology.empty())
 		internal::Debug()
@@ -104,8 +102,7 @@ topology_t scheduler<T>::init_topology(
 
 	topology_t topo;
 
-	topo.push_back({0, -1});
-	for (int i = 1; i < nworkers; ++i) {
+	for (int i = 0; i < m_nworkers; ++i) {
 		topo.push_back({i, i - 1});
 	}
 
