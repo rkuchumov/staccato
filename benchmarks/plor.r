@@ -13,7 +13,7 @@ read_input <- function (path) {
 }
 
 my_plot <- function (data, name, title = 'atata') {
-    d <- data[data$name=='fib',]
+    d <- data[data$name==name,]
 
     p <- ggplot(d, aes(x = threads, y = time, group = sched, color = sched)) +
         geom_line() +
@@ -34,9 +34,7 @@ my_plot <- function (data, name, title = 'atata') {
 }
 
 save_plot <- function(p, path) {
-    png(path, width=800, height=300, pointsize=50)
-    print(p)
-    dev.off()
+    ggsave(path, p, width = 10, height = 6)
 }
 
 args = commandArgs(trailingOnly=TRUE)

@@ -21,17 +21,18 @@ namespace staccato
 template <typename T>
 class task;
 
+typedef std::vector<std::pair<size_t, int>> topology_t;
+
 template <typename T>
 class scheduler
 {
 public:
-	typedef const std::vector<std::pair<size_t, int>> &affinity_t;
 
 	scheduler(
 		size_t nworkers,
 		size_t taskgraph_degree,
 		size_t taskgraph_height = 1,
-		affinity_t &affinity_map = {}
+		const topology_t &topology = {}
 	);
 
 	~scheduler();
@@ -41,10 +42,16 @@ public:
 	void wait();
 
 private:
+	topology_t init_topology(
+		size_t nworkers,
+		size_t degree,
+		const topology_t &topology
+	);
+
 	void create_workers(
 		size_t taskgraph_degree,
 		size_t taskgraph_height,
-		affinity_t affinity_map);
+		const topology_t &topology);
 
 	enum state_t { 
 		terminated,
@@ -64,7 +71,7 @@ scheduler<T>::scheduler(
 	size_t nworkers,
 	size_t taskgraph_degree,
 	size_t taskgraph_height,
-	affinity_t affinity_map
+	const topology_t &topology
 )
 : m_nworkers(nworkers)
 , m_state(state_t::terminated)
@@ -76,16 +83,49 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
-	create_workers(taskgraph_degree, taskgraph_height, affinity_map);
+	auto topo = init_topology(taskgraph_degree, nworkers, topology);
+
+	create_workers(taskgraph_degree, taskgraph_height, topo);
 
 	m_state = state_t::initialized;
+}
+
+template <typename T>
+topology_t scheduler<T>::init_topology(
+	size_t nworkers,
+	size_t degree,
+	const topology_t &topology)
+{
+	if (topology.size() == nworkers)
+		return topology;
+	else if (!topology.empty())
+		internal::Debug()
+			<< "The size supplied topology is not equal to the number of workers";
+
+	topology_t topo;
+
+	topo.push_back({0, -1});
+	for (int i = 1; i < nworkers; ++i) {
+		topo.push_back({i, i - 1});
+	}
+
+	// size_t nthreads = std::thread::hardware_concurrency();
+	// topo.push_back({0, -1});
+	// topo.push_back({nthreads / 2, 0});
+    //
+	// for (size_t i = 1; i < nthreads / 2; ++i) {
+	// 	topo.push_back({i, nthreads / 2 + i - 1});
+	// 	topo.push_back({nthreads / 2 + i, i});
+	// }
+
+	return topo;
 }
 
 template <typename T>
 void scheduler<T>::create_workers(
 	size_t taskgraph_degree,
 	size_t taskgraph_height,
-	affinity_t affinity_map
+	const topology_t &topology
 ) {
 	using namespace internal;
 
@@ -94,16 +134,9 @@ void scheduler<T>::create_workers(
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i] = new worker<T>(degree, taskgraph_height);
 
-	if (affinity_map.size() != m_nworkers) {
-		m_workers[0]->async_init(true, 0, nullptr);
-		for (size_t i = 1; i < m_nworkers; ++i)
-			m_workers[i]->async_init(false, i, m_workers[i - 1]);
-		return;
-	} 
-
 	for (size_t i = 0; i < m_nworkers; ++i) {
-		auto victim = affinity_map[i].second;
-		auto core = affinity_map[i].first;
+		auto core = topology[i].first;
+		auto victim = topology[i].second;
 		if (victim < 0)
 			m_workers[i]->async_init(i == 0, core, nullptr);
 		else
