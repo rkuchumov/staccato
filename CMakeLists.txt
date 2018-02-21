@@ -34,6 +34,7 @@ set(HEADERS
 	include/lifo_allocator.hpp
 	include/worker.hpp
 	include/utils.hpp
+	include/topology.hpp
 )
 
 install(

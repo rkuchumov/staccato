@@ -167,7 +167,6 @@ T *task_deque<T>::steal(bool *was_empty, bool *was_null)
 	auto t = load_acquire(m_top);
 	atomic_fence_seq_cst();
 	auto b = load_acquire(m_bottom);
-	auto n = load_relaxed(m_nstolen);
 
 	// Check if deque was empty
 	if (t >= b) {
