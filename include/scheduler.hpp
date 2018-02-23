@@ -90,6 +90,8 @@ void scheduler<T>::create_workers() {
 	using namespace internal;
 
 	m_workers = new worker_t[m_nworkers];
+	for (int i = 0; i < m_nworkers; ++i)
+		m_workers[i].ready = false;
 
 	for (size_t i = 0; i < m_topology.get().size(); ++i) {
 		if (i >= m_nworkers)

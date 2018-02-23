@@ -62,9 +62,8 @@ private:
 #endif
 
 	std::atomic_bool m_stopped;
-	std::atomic_bool m_victim_is_set;
 
-	worker<T> *m_victim;
+	std::atomic<worker<T> *> m_victim;
 
 	task_deque<T> *m_victim_head;
 
@@ -118,10 +117,10 @@ worker<T>::~worker()
 template <typename T>
 void worker<T>::set_victim(worker<T> *victim)
 {
-	m_victim = victim;
+	ASSERT(victim, "invalid pointer");
 
 	auto h = m_head_deque;
-	m_victim_head = m_victim->m_head_deque;
+	m_victim_head = victim->m_head_deque;
 	auto p = m_victim_head;
 
 	while (h && p) {
@@ -132,7 +131,7 @@ void worker<T>::set_victim(worker<T> *victim)
 	}
 
 	m_victim_tail = p;
-	m_victim_is_set = true;
+	m_victim = victim;
 }
 
 template <typename T>
@@ -186,7 +185,7 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 template <typename T>
 void worker<T>::steal_loop()
 {
-	while (!m_victim_is_set)
+	while (!m_victim)
 		std::this_thread::yield();
 
 	auto vhead = m_victim_head;
