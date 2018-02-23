@@ -178,7 +178,7 @@ scheduler<T>::~scheduler()
 		m_workers[i].wkr->stop();
 	}
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 	internal::counter::print_header();
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i].wkr->print_counters();

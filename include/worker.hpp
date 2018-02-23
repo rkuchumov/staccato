@@ -41,7 +41,7 @@ public:
 	void root_commit();
 	void root_wait();
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 	void print_counters();
 #endif
 
@@ -57,7 +57,7 @@ private:
 	const size_t m_taskgraph_height;
 	lifo_allocator *m_allocator;
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 	counter m_counter;
 #endif
 
@@ -193,19 +193,12 @@ void worker<T>::steal_loop()
 	size_t now_stolen = 0;
 
 	while (!load_relaxed(m_stopped)) {
-		if (now_stolen >= m_taskgraph_degree - 1) {
-			if (vtail->get_next()) {
-				vtail = vtail->get_next();
-				now_stolen = 0;
-			}
-		}
-
 		bool was_null = false;
 		bool was_empty = false;
 
 		auto t = vtail->steal(&was_empty, &was_null);
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 		if (t)
 			COUNT(steal);
 		else if (was_null)
@@ -220,9 +213,8 @@ void worker<T>::steal_loop()
 			t->process(this, m_head_deque);
 			vtail->return_stolen();
 
-			// vtail = vhead;
-			// now_stolen = 0;
-			now_stolen++;
+			vtail = vhead;
+			now_stolen = 0;
 			continue;
 		}
 
@@ -238,6 +230,12 @@ void worker<T>::steal_loop()
 			}
 		} else {
 			now_stolen++;
+			if (now_stolen >= m_taskgraph_degree - 1) {
+				if (vtail->get_next()) {
+					vtail = vtail->get_next();
+					now_stolen = 0;
+				}
+			}
 		}
 	}
 }
@@ -264,7 +262,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 		t = tail->take(&nstolen);
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 		if (t)
 			COUNT(take);
 		else if (nstolen == 0)
@@ -279,14 +277,14 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (nstolen == 0)
 			return;
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 		bool was_null = false;
 		bool was_empty = false;
 #endif
 
 		t = steal_task(tail, &victim);
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 		if (t)
 			COUNT(steal2);
 		else if (was_null)
@@ -319,7 +317,7 @@ task<T> *worker<T>::steal_task(task_deque<T> *tail, task_deque<T> **victim)
 	return nullptr;
 }
 
-#ifdef STACCATO_DEBUG
+#if STACCATO_DEBUG
 
 template <typename T>
 void worker<T>::print_counters()
