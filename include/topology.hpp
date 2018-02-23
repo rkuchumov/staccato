@@ -45,7 +45,6 @@ topology::topology(unsigned ncores, unsigned nthreads, unsigned nsockets)
 			for (unsigned c = 0; c < ncores; ++c) {
 				unsigned i = t * nsockets * ncores + s * ncores + c;
 				m_data.push_back({w, i, v});
-				std::cout << "#" << w << " core " << i << " victim " << v << std::endl;
 				v = w;
 				w++;
 			}

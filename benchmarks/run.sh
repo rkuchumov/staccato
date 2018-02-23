@@ -1,28 +1,28 @@
 #!/bin/bash
 
-runs=1
-
-threads=(1 2 3 4)
 
 args_fib="42"
-# args_dfs="9 9"
-# args_mergesort="800000"
+args_dfs="9 9"
+args_mergesort="100000000"
+args_matmul="3000"
+args_blkmul="8"
+
+runs=1
+threads=(4)
+
+# args_fib="35"
+# args_dfs="7 7"
+# args_mergesort="100000"
 # args_matmul="800"
 # args_blkmul="6"
 
-# args_fib="35"
-args_dfs="7 7"
-args_mergesort="100000"
-args_matmul="800"
-args_blkmul="6"
-
 benchmarks=(
 	"staccato fib _threads_ $args_fib"
-	# "staccato dfs _threads_ $args_dfs"
-	# "staccato mergesort _threads_ $args_mergesort"
-	# "staccato matmul _threads_ $args_matmul"
-	# "staccato blkmul _threads_ $args_blkmul"
-	"cilk fib _threads_ $args_fib"
+	"staccato dfs _threads_ $args_dfs"
+	"staccato mergesort _threads_ $args_mergesort"
+	"staccato matmul _threads_ $args_matmul"
+	"staccato blkmul _threads_ $args_blkmul"
+	# "cilk fib _threads_ $args_fib"
 	# "cilk dfs _threads_ $args_dfs"
 	# "cilk mergesort _threads_ $args_mergesort"
 	# "cilk matmul _threads_ $args_matmul"

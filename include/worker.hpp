@@ -19,14 +19,18 @@ template <typename T>
 class worker
 {
 public:
-	worker(size_t taskgraph_degree, size_t taskgraph_height);
+	worker(
+		size_t id,
+		lifo_allocator *alloc,
+		size_t taskgraph_degree,
+		size_t taskgraph_height
+	);
+
 	~worker();
 
-	void async_init(bool is_master, size_t core_id, worker<T> *victim);
+	void set_victim(worker<T> *victim);
 
-	void join();
-
-	bool ready() const;
+	void stop();
 
 	void local_loop(task_deque<T> *tail);
 
@@ -37,28 +41,18 @@ public:
 	void root_wait();
 
 private:
-    inline size_t predict_page_size() const;
-
 	void init(size_t core_id, worker<T> *victim);
-
-	void pin_thread(size_t core_id);
-
-	void sync_with_victim();
 
     void grow_tail(task_deque<T> *tail);
 
     task<T> *steal_task(task_deque<T> *tail, task_deque<T> **victim);
 
+	const size_t m_id;
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
-
 	lifo_allocator *m_allocator;
 
-	std::thread *m_thread;
-
-	std::atomic_bool m_joined;
-
-	std::atomic_bool m_ready;
+	std::atomic_bool m_stopped;
 
 	worker<T> *m_victim;
 
@@ -70,53 +64,22 @@ private:
 };
 
 template <typename T>
-worker<T>::worker(size_t taskgraph_degree, size_t taskgraph_height)
-: m_taskgraph_degree(taskgraph_degree)
+worker<T>::worker(
+	size_t id,
+	lifo_allocator *alloc,
+	size_t taskgraph_degree,
+	size_t taskgraph_height
+)
+: m_id(id)
+, m_taskgraph_degree(taskgraph_degree)
 , m_taskgraph_height(taskgraph_height)
-, m_allocator(nullptr)
-, m_thread(nullptr)
-, m_joined(false)
-, m_ready(false)
+, m_allocator(alloc)
+, m_stopped(false)
+, m_victim(nullptr)
+, m_victim_head(nullptr)
 , m_victim_tail(nullptr)
 , m_head_deque(nullptr)
-{ }
-
-template <typename T>
-worker<T>::~worker()
 {
-	delete m_thread;
-	delete m_allocator;
-}
-
-template <typename T>
-void worker<T>::async_init(bool is_master, size_t core_id, worker<T> *victim)
-{
-	// TODO: use sync barrier
-
-	if (is_master) {
-		init(core_id, victim);
-		m_ready = true;
-		return;
-	}
-
-	m_thread = new std::thread([=] {
-			init(core_id, victim);
-			m_ready = true;
-			sync_with_victim();
-			steal_loop();
-		}
-	);
-}
-
-template <typename T>
-void worker<T>::init(size_t core_id, worker<T> *victim)
-{
-	pin_thread(core_id);
-
-	m_victim = victim;
-
-	m_allocator = new lifo_allocator(predict_page_size());
-
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
 	new(d) task_deque<T>(m_taskgraph_degree, t);
@@ -137,35 +100,15 @@ void worker<T>::init(size_t core_id, worker<T> *victim)
 }
 
 template <typename T>
-void worker<T>::pin_thread(size_t core_id)
+worker<T>::~worker()
 {
-	cpu_set_t cpuset;
-	CPU_ZERO(&cpuset);
-	CPU_SET(core_id, &cpuset);
-
-	pthread_t current_thread = pthread_self();    
-	pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+	delete m_allocator;
 }
 
 template <typename T>
-inline size_t worker<T>::predict_page_size() const
+void worker<T>::set_victim(worker<T> *victim)
 {
-	size_t s = 0;
-	s += alignof(task_deque<T>) + sizeof(task_deque<T>);
-	s += alignof(T) + sizeof(T) * m_taskgraph_degree;
-	s *= m_taskgraph_height;
-	return s;
-}
-
-template <typename T>
-void worker<T>::sync_with_victim()
-{
-	if (!m_victim)
-		return;
-
-	// TODO: use conditiona variables maybe?
-	while (!m_victim->m_ready)
-		std::this_thread::yield();
+	m_victim = victim;
 
 	auto h = m_head_deque;
 	m_victim_head = m_victim->m_head_deque;
@@ -182,10 +125,9 @@ void worker<T>::sync_with_victim()
 }
 
 template <typename T>
-void worker<T>::join()
+void worker<T>::stop()
 {
-	m_joined = true;
-	m_thread->join();
+	m_stopped = true;
 }
 
 template <typename T>
@@ -235,7 +177,7 @@ void worker<T>::steal_loop()
 {
 	auto vtail = m_victim_head;
 
-	while (!load_relaxed(m_joined)) {
+	while (!load_relaxed(m_stopped)) {
 		bool was_null = false;
 		bool was_empty = false;
 
