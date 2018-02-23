@@ -19,15 +19,16 @@ public:
 
 	enum event_e { 
 		take         = 0,
-		take_failed  = 1,
-		steal        = 2,
-		steal_race   = 3,
-		steal_null   = 4,
-		steal_empty  = 5,
-		steal2       = 6,
-		steal2_race  = 7,
-		steal2_null  = 8,
-		steal2_empty = 9,
+		take_empty   = 1,
+		take_stolen  = 2,
+		steal        = 3,
+		steal_race   = 4,
+		steal_null   = 5,
+		steal_empty  = 6,
+		steal2       = 7,
+		steal2_race  = 8,
+		steal2_null  = 9,
+		steal2_empty = 10,
 	};
 
 	void count(event_e e);
@@ -37,12 +38,13 @@ public:
 	void print(size_t id) const;
 
 private:
-	static const size_t m_nconsters = 10;
+	static const size_t m_nconsters = 11;
 	static const int m_cell_width = 9;
 
 	static const constexpr char* const m_events[] = { 
 		"take",
-		"take!",
+		"take!e",
+		"take!s",
 		"steal",
 		"steal!r",
 		"steal!n",
@@ -73,7 +75,7 @@ void counter::print_header()
 {
 	FILE *fp = stdout;
 
-	fprintf(fp, "[STACCATO] ");
+	fprintf(fp, "[STACCATO]");
 	fprintf(fp, " w# |");
 
 	auto n = sizeof(m_events) / sizeof(m_events[0]);
@@ -86,7 +88,7 @@ void counter::print_header()
 void counter::print(size_t id) const
 {
 	FILE *fp = stdout;
-	fprintf(fp, "[STACCATO] ");
+	fprintf(fp, "[STACCATO]");
 	fprintf(fp, "%3lu |", id);
 
 	for (size_t i = 0; i < m_nconsters; ++i)

@@ -248,8 +248,10 @@ void worker<T>::local_loop(task_deque<T> *tail)
 #ifdef STACCATO_DEBUG
 		if (t)
 			COUNT(take);
+		else if (nstolen == 0)
+			COUNT(take_empty);
 		else
-			COUNT(take_failed);
+			COUNT(take_stolen);
 #endif
 
 		if (t)
