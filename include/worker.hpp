@@ -48,9 +48,9 @@ public:
 private:
 	void init(size_t core_id, worker<T> *victim);
 
-    void grow_tail(task_deque<T> *tail);
+	void grow_tail(task_deque<T> *tail);
 
-    task<T> *steal_task(task_deque<T> *tail, task_deque<T> **victim);
+	task<T> *steal_task(task_deque<T> *tail, task_deque<T> **victim);
 
 	const size_t m_id;
 	const size_t m_taskgraph_degree;
@@ -62,6 +62,7 @@ private:
 #endif
 
 	std::atomic_bool m_stopped;
+	std::atomic_bool m_victim_is_set;
 
 	worker<T> *m_victim;
 
@@ -131,6 +132,7 @@ void worker<T>::set_victim(worker<T> *victim)
 	}
 
 	m_victim_tail = p;
+	m_victim_is_set = true;
 }
 
 template <typename T>
@@ -184,6 +186,9 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 template <typename T>
 void worker<T>::steal_loop()
 {
+	while (!m_victim_is_set)
+		std::this_thread::yield();
+
 	auto vhead = m_victim_head;
 	auto vtail = vhead;
 	size_t now_stolen = 0;
@@ -216,8 +221,9 @@ void worker<T>::steal_loop()
 			t->process(this, m_head_deque);
 			vtail->return_stolen();
 
-			vtail = vhead;
-			now_stolen = 0;
+			// vtail = vhead;
+			// now_stolen = 0;
+			now_stolen++;
 			continue;
 		}
 

@@ -29,8 +29,8 @@ public:
 		steal2_race  = 8,
 		steal2_null  = 9,
 		steal2_empty = 10,
-		usr1         = 11,
-		usr2         = 12,
+		dbg1         = 11,
+		dbg2         = 12,
 	};
 
 	void count(event_e e);
@@ -55,8 +55,8 @@ private:
 		"steal2!r",
 		"steal2!n",
 		"steal2!e",
-		"usr1",
-		"usr2"
+		"dbg1",
+		"dbg2"
 	};
 
 	unsigned long m_counters[m_nconsters];
