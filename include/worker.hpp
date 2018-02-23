@@ -184,9 +184,18 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 template <typename T>
 void worker<T>::steal_loop()
 {
-	auto vtail = m_victim_head;
+	auto vhead = m_victim_head;
+	auto vtail = vhead;
+	size_t now_stolen = 0;
 
 	while (!load_relaxed(m_stopped)) {
+		if (now_stolen >= m_taskgraph_degree - 1) {
+			if (vtail->get_next()) {
+				vtail = vtail->get_next();
+				now_stolen = 0;
+			}
+		}
+
 		bool was_null = false;
 		bool was_empty = false;
 
@@ -206,19 +215,24 @@ void worker<T>::steal_loop()
 		if (t) {
 			t->process(this, m_head_deque);
 			vtail->return_stolen();
+
+			vtail = vhead;
+			now_stolen = 0;
 			continue;
 		}
 
-		if (was_empty)
-		{
-			if (vtail->get_next())
+		if (was_empty) {
+			if (vtail->get_next()) {
 				vtail = vtail->get_next();
-		}
-
-		if (was_null)
-		{
-			if (vtail->get_prev())
+				now_stolen = 0;
+			}
+		} else if (was_null) {
+			if (vtail->get_prev()) {
 				vtail = vtail->get_prev();
+				now_stolen = 0;
+			}
+		} else {
+			now_stolen++;
 		}
 	}
 }

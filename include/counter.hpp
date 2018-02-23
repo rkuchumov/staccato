@@ -29,6 +29,8 @@ public:
 		steal2_race  = 8,
 		steal2_null  = 9,
 		steal2_empty = 10,
+		usr1         = 11,
+		usr2         = 12,
 	};
 
 	void count(event_e e);
@@ -38,7 +40,7 @@ public:
 	void print(size_t id) const;
 
 private:
-	static const size_t m_nconsters = 11;
+	static const size_t m_nconsters = 13;
 	static const int m_cell_width = 9;
 
 	static const constexpr char* const m_events[] = { 
@@ -52,7 +54,9 @@ private:
 		"steal2",
 		"steal2!r",
 		"steal2!n",
-		"steal2!e"
+		"steal2!e",
+		"usr1",
+		"usr2"
 	};
 
 	unsigned long m_counters[m_nconsters];
@@ -88,6 +92,7 @@ void counter::print_header()
 void counter::print(size_t id) const
 {
 	FILE *fp = stdout;
+
 	fprintf(fp, "[STACCATO]");
 	fprintf(fp, "%3lu |", id);
 
