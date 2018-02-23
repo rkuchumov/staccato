@@ -16,6 +16,7 @@
 #include "worker.hpp"
 #include "topology.hpp"
 #include "lifo_allocator.hpp"
+#include "counter.hpp"
 
 namespace staccato
 {
@@ -115,7 +116,10 @@ void scheduler<T>::create_worker(size_t id, size_t core_id, int victim_id)
 {
 	using namespace internal;
 
-	Debug() << "Init worker #" << id << " at CPU" << core_id;
+	Debug() 
+		<< "Init worker #" << id 
+		<< " at CPU" << core_id
+		<< " victim #" << victim_id;
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
@@ -171,6 +175,12 @@ scheduler<T>::~scheduler()
 
 		m_workers[i].wkr->stop();
 	}
+
+#ifdef STACCATO_DEBUG
+	internal::counter::print_header();
+	for (size_t i = 0; i < m_nworkers; ++i)
+		m_workers[i].wkr->print_counters();
+#endif
 
 	for (size_t i = 1; i < m_nworkers; ++i)
 		m_workers[i].thr->join();

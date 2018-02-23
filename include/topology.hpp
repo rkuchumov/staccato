@@ -37,11 +37,11 @@ topology::topology(unsigned ncores, unsigned nthreads, unsigned nsockets)
 	size_t w = 0;
 	int v = -1;
 
-	for (unsigned s = 0; s < nsockets; ++s) {
-		if (s > 0)
-			v = (s - 1) * ncores;
+	for (unsigned t = 0; t < nthreads; ++t) {
+		for (unsigned s = 0; s < nsockets; ++s) {
+			if (s > 0)
+				v = (s - 1) * ncores;
 
-		for (unsigned t = 0; t < nthreads; ++t) {
 			for (unsigned c = 0; c < ncores; ++c) {
 				unsigned i = t * nsockets * ncores + s * ncores + c;
 				m_data.push_back({w, i, v});

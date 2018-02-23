@@ -42,6 +42,8 @@
 #define dec_relaxed_p(var) (var)->fetch_sub(1, std::memory_order_relaxed)
 #define inc_relaxed_p(var) (var)->fetch_add(1, std::memory_order_relaxed)
 
+#define COUNT(e) m_counter.count(counter::e)
+
 namespace staccato {
 namespace internal {
 

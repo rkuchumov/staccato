@@ -35,6 +35,7 @@ set(HEADERS
 	include/worker.hpp
 	include/utils.hpp
 	include/topology.hpp
+	include/counter.hpp
 )
 
 install(

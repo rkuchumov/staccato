@@ -9,6 +9,7 @@
 #include "lifo_allocator.hpp"
 #include "constants.hpp"
 #include "task.hpp"
+#include "counter.hpp"
 
 namespace staccato
 {
@@ -40,6 +41,10 @@ public:
 	void root_commit();
 	void root_wait();
 
+#ifdef STACCATO_DEBUG
+	void print_counters();
+#endif
+
 private:
 	void init(size_t core_id, worker<T> *victim);
 
@@ -51,6 +56,10 @@ private:
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
 	lifo_allocator *m_allocator;
+
+#ifdef STACCATO_DEBUG
+	counter m_counter;
+#endif
 
 	std::atomic_bool m_stopped;
 
@@ -183,8 +192,18 @@ void worker<T>::steal_loop()
 
 		auto t = vtail->steal(&was_empty, &was_null);
 
+#ifdef STACCATO_DEBUG
+		if (t)
+			COUNT(steal);
+		else if (was_null)
+			COUNT(steal_empty);
+		else if (was_empty)
+			COUNT(steal_empty);
+		else
+			COUNT(steal_race);
+#endif
+
 		if (t) {
-			// Debug() << "stolen";
 			t->process(this, m_head_deque);
 			vtail->return_stolen();
 			continue;
@@ -192,14 +211,12 @@ void worker<T>::steal_loop()
 
 		if (was_empty)
 		{
-			// Debug() << "empty";
 			if (vtail->get_next())
 				vtail = vtail->get_next();
 		}
 
 		if (was_null)
 		{
-			// Debug() << "null";
 			if (vtail->get_prev())
 				vtail = vtail->get_prev();
 		}
@@ -228,13 +245,36 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 		t = tail->take(&nstolen);
 
+#ifdef STACCATO_DEBUG
+		if (t)
+			COUNT(take);
+		else
+			COUNT(take_failed);
+#endif
+
 		if (t)
 			continue;
 
 		if (nstolen == 0)
 			return;
 
+#ifdef STACCATO_DEBUG
+		bool was_null = false;
+		bool was_empty = false;
+#endif
+
 		t = steal_task(tail, &victim);
+
+#ifdef STACCATO_DEBUG
+		if (t)
+			COUNT(steal2);
+		else if (was_null)
+			COUNT(steal2_empty);
+		else if (was_empty)
+			COUNT(steal2_empty);
+		else
+			COUNT(steal2_race);
+#endif
 	}
 }
 
@@ -257,6 +297,16 @@ task<T> *worker<T>::steal_task(task_deque<T> *tail, task_deque<T> **victim)
 
 	return nullptr;
 }
+
+#ifdef STACCATO_DEBUG
+
+template <typename T>
+void worker<T>::print_counters()
+{
+	m_counter.print(m_id);
+}
+
+#endif
 
 }
 }
