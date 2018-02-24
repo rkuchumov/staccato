@@ -55,7 +55,8 @@ int main(int argc, char *argv[])
 	auto start = system_clock::now();
 
 	{
-		scheduler<FibTask> sh(nthreads, 2);
+		topology topo(nthreads);
+		scheduler<FibTask> sh(2, topo);
 		sh.spawn(new(sh.root()) FibTask(n, &answer));
 		sh.wait();
 	}

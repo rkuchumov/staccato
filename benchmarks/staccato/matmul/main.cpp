@@ -182,7 +182,8 @@ int main(int argc, char *argv[]) {
 	auto start = system_clock::now();
 
 	{
-		scheduler<MultTask> sh(nthreads, 2);
+		topology topo(nthreads);
+		scheduler<MultTask> sh(2, topo);
 		sh.spawn(new(sh.root()) MultTask(A, B, C, n, n, n, n, 0));
 		sh.wait();
 	}

@@ -30,10 +30,9 @@ class scheduler
 public:
 
 	scheduler (
-		size_t nworkers,
 		size_t taskgraph_degree,
-		size_t taskgraph_height = 1,
-		const topology &topo = topology() 
+		const topology &topo = topology(),
+		size_t taskgraph_height = 1
 	);
 
 	~scheduler();
@@ -67,20 +66,16 @@ private:
 
 template <typename T>
 scheduler<T>::scheduler(
-	size_t nworkers,
 	size_t taskgraph_degree,
-	size_t taskgraph_height,
-	const topology &topo
+	const topology &topo,
+	size_t taskgraph_height
 )
 : m_taskgraph_degree(internal::next_pow2(taskgraph_degree))
 , m_taskgraph_height(taskgraph_height)
 , m_topology(topo)
-, m_nworkers(nworkers)
+, m_nworkers(topo.get_nworkers())
 {
 	internal::Debug() << "Scheduler is working in debug mode";
-
-	if (m_nworkers == 0)
-		m_nworkers = std::thread::hardware_concurrency();
 
 	create_workers();
 }
@@ -90,25 +85,23 @@ void scheduler<T>::create_workers() {
 	using namespace internal;
 
 	m_workers = new worker_t[m_nworkers];
-	for (int i = 0; i < m_nworkers; ++i)
+	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i].ready = false;
 
-	for (size_t i = 0; i < m_topology.get().size(); ++i) {
-		if (i >= m_nworkers)
-			break;
+	for (auto &elem : m_topology.get()) {
+		auto core = elem.first;
+		auto w = elem.second;
 
-		auto w = m_topology.get()[i];
-
-		if (i == 0) {
+		if (w.id == 0) {
 			m_workers[0].thr = nullptr;
-			create_worker(0, w.core, w.victim, w.flags);
+			create_worker(0, core, w.victim, w.flags);
 			m_master = m_workers[0].wkr;
 			continue;
 		}
 
-		m_workers[i].thr = new std::thread([=] {
-			create_worker(i, w.core, w.victim, w.flags);
-			m_workers[i].wkr->steal_loop();
+		m_workers[w.id].thr = new std::thread([=] {
+			create_worker(w.id, core, w.victim, w.flags);
+			m_workers[w.id].wkr->steal_loop();
 		});
 	}
 }

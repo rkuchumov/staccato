@@ -347,7 +347,8 @@ int main(int argc, char *argv[])
 	auto start = system_clock::now();
 
 	{
-		scheduler<OperationTask> sh(nthreads, 8);
+		topology topo(nthreads);
+		scheduler<OperationTask> sh(8, topo);
 		sh.spawn(new(sh.root()) OperationTask(A, B, R, nblocks));
 		sh.wait();
 	}

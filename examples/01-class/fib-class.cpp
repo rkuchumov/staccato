@@ -43,19 +43,20 @@ private:
 
 int main(int argc, char *argv[])
 {
-	unsigned n = 20;
+	size_t n = 20;
 	long answer; 
+	size_t nthreads = 0;
 
-	if (argc == 2) {
-		n = atoi(argv[1]);
-	}
+	if (argc >= 2)
+		nthreads = atoi(argv[1]);
+	if (argc >= 3)
+		n = atoi(argv[2]);
+	if (nthreads == 0)
+		nthreads = thread::hardware_concurrency();
 
 	{
-		scheduler<FibTask> sh(4, 2);
-		// scheduler<FibTask> sh(4, 2, n,
-		// 	{{0, -1}, {1, 0}, {2, 0}, {3, 1}});
-		// scheduler<FibTask> sh(4, 2, n,
-		// 	{{0, -1}, {1, 0}, {2, 0}, {3, 0}});
+		topology topo(nthreads);
+		scheduler<FibTask> sh(2, topo, n);
 		sh.spawn(new(sh.root()) FibTask(n, &answer));
 		sh.wait();
 	}

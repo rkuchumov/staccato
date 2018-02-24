@@ -216,7 +216,7 @@ void worker<T>::steal_loop()
 			t->process(this, m_head_deque);
 			vtail->return_stolen();
 
-			if (m_flags & worker_flags_e::virtual_thread) {
+			if (m_flags & worker_flags_e::sibling_victim) {
 				now_stolen++;
 			} else {
 				vtail = vhead;

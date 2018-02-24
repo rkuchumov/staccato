@@ -105,7 +105,8 @@ int main(int argc, char *argv[])
 	auto start = system_clock::now();
 
 	{
-		scheduler<SortTask> sh(nthreads, 2);
+		topology topo(nthreads);
+		scheduler<SortTask> sh(2, topo);
 		sh.spawn(new(sh.root()) SortTask(0, n));
 		sh.wait();
 	}

@@ -48,7 +48,7 @@ namespace staccato {
 namespace internal {
 
 enum worker_flags_e {
-	virtual_thread = 0x1,
+	sibling_victim = 0x1,
 	socket_master  = 0x2
 };
 
