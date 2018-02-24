@@ -23,14 +23,12 @@ public:
 		take_stolen  = 2,
 		steal        = 3,
 		steal_race   = 4,
-		steal_null   = 5,
-		steal_empty  = 6,
-		steal2       = 7,
-		steal2_race  = 8,
-		steal2_null  = 9,
-		steal2_empty = 10,
-		dbg1         = 11,
-		dbg2         = 12,
+		steal_empty  = 5,
+		steal2       = 6,
+		steal2_race  = 7,
+		steal2_empty = 8,
+		dbg1         = 9,
+		dbg2         = 10,
 	};
 
 	void count(event_e e);
@@ -40,7 +38,7 @@ public:
 	void print(size_t id) const;
 
 private:
-	static const size_t m_nconsters = 13;
+	static const size_t m_nconsters = 11;
 	static const int m_cell_width = 9;
 
 	static const constexpr char* const m_events[] = { 
@@ -49,11 +47,9 @@ private:
 		"take!s",
 		"steal",
 		"steal!r",
-		"steal!n",
 		"steal!e",
 		"steal2",
 		"steal2!r",
-		"steal2!n",
 		"steal2!e",
 		"dbg1",
 		"dbg2"

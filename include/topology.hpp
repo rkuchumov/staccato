@@ -6,6 +6,8 @@
 #include <iostream>
 #include <thread>
 
+#include "utils.hpp"
+
 namespace staccato
 {
 
@@ -13,17 +15,17 @@ class topology
 {
 public:
 	topology (
-		unsigned ncores = std::thread::hardware_concurrency(),
-		unsigned nthreads = 1,
+		unsigned ncores = std::thread::hardware_concurrency() / 2,
+		unsigned nthreads = 2,
 		unsigned nsockets = 1
 	);
 
 	virtual ~topology ();
 
 	struct worker_t {
-		size_t id;
 		unsigned core;
 		int victim;
+		size_t flags;
 	};
 
 	virtual const std::vector<worker_t> &get() const;
@@ -34,7 +36,6 @@ protected:
 
 topology::topology(unsigned ncores, unsigned nthreads, unsigned nsockets)
 {
-	size_t w = 0;
 	int v = -1;
 
 	for (unsigned t = 0; t < nthreads; ++t) {
@@ -44,9 +45,16 @@ topology::topology(unsigned ncores, unsigned nthreads, unsigned nsockets)
 
 			for (unsigned c = 0; c < ncores; ++c) {
 				unsigned i = t * nsockets * ncores + s * ncores + c;
-				m_data.push_back({w, i, v});
-				v = w;
-				w++;
+
+				size_t f = 0;
+
+				if (t > 0)
+					f |= internal::worker_flags_e::virtual_thread;
+				else if (c == 0)
+					f |= internal::worker_flags_e::socket_master;
+
+				m_data.push_back({i, v, f});
+				v++;
 			}
 		}
 	}

@@ -54,11 +54,7 @@ void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail
 	m_worker = worker;
 	m_tail = tail;
 
-	m_tail->set_null(false);
-
 	execute();
-
-	m_tail->set_null(true);
 }
 
 template <typename T>

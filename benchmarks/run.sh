@@ -29,7 +29,7 @@ benchmarks=(
 	# "cilk blkmul _threads_ $args_blkmul"
 )
 
-export CXXFLAGS=-I\ ~/.local/include/
+export CXXFLAGS=-I\ ~/.local/include/\ -DSTACCATO_DEBUG=1
 
 function get_integer() {
 	echo "$1" | grep "$2" | grep -o "[0-9].*"

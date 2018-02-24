@@ -54,7 +54,7 @@ private:
 	void pin_thread(size_t core_id);
 
 	void create_workers();
-	void create_worker(size_t id, size_t core_id, int victim_id);
+	void create_worker(size_t id, size_t core_id, int victim_id, size_t flags);
 
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
@@ -101,33 +101,34 @@ void scheduler<T>::create_workers() {
 
 		if (i == 0) {
 			m_workers[0].thr = nullptr;
-			create_worker(0, w.core, w.victim);
+			create_worker(0, w.core, w.victim, w.flags);
 			m_master = m_workers[0].wkr;
 			continue;
 		}
 
 		m_workers[i].thr = new std::thread([=] {
-			create_worker(i, w.core, w.victim);
+			create_worker(i, w.core, w.victim, w.flags);
 			m_workers[i].wkr->steal_loop();
 		});
 	}
 }
 
 template <typename T>
-void scheduler<T>::create_worker(size_t id, size_t core_id, int victim_id)
+void scheduler<T>::create_worker(size_t id, size_t core_id, int victim_id, size_t flags)
 {
 	using namespace internal;
 
 	Debug() 
 		<< "Init worker #" << id 
 		<< " at CPU" << core_id
-		<< " victim #" << victim_id;
+		<< " victim #" << victim_id
+		<< " flags: " << flags;
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
 	auto wkr = alloc->alloc<worker<T>>();
 	new(wkr)
-		worker<T>(id, alloc, m_taskgraph_degree, m_taskgraph_height);
+		worker<T>(id, alloc, m_taskgraph_degree, m_taskgraph_height, flags);
 
 	pin_thread(core_id);
 

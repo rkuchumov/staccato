@@ -47,6 +47,12 @@
 namespace staccato {
 namespace internal {
 
+enum worker_flags_e {
+	virtual_thread = 0x1,
+	socket_master  = 0x2
+};
+
+
 inline size_t cache_align(size_t x, size_t to = STACCATO_CACHE_SIZE) {
 	return (x + (to - 1)) & ~(to - 1);
 }
