@@ -6,6 +6,7 @@
 #include <iostream>
 #include <thread>
 #include <map>
+#include <limits>
 
 #include "utils.hpp"
 
@@ -27,19 +28,20 @@ public:
 	virtual size_t get_nthreads() const;
 	virtual size_t get_ncores() const;
 
-	virtual size_t get_core_id(
+	virtual size_t get_cpu_id(
 		size_t soc,
 		size_t thr,
 		size_t cor
 	) const;
 
 	struct worker_t {
+		size_t id;
+
 		size_t soc;
 		size_t thr;
 		size_t cor;
 
-		size_t id;
-		int victim;
+		size_t victim;
 		size_t flags;
 	};
 
@@ -47,14 +49,18 @@ public:
 
 	size_t get_nworkers() const;
 
-	// void print() const;
+#if STACCATO_DEBUG
+	void print(size_t cpu = 0, size_t depth = 1) const;
+#endif
 
 protected:
 	void build_map();
-	void link_thiefs();
+	void link_thieves();
 	bool link_thief(size_t victim, size_t thief, size_t flags = 0);
-	bool link_core_thief(size_t id, size_t s, size_t t, size_t c);
-	bool link_thread_thief(size_t id, size_t s, size_t t, size_t c);
+	bool set_thief_at_next_core(size_t victim, const worker_t &w);
+	bool set_thief_at_next_thread(size_t victim, const worker_t &w);
+
+	static const size_t UNDEF = std::numeric_limits<size_t>::max();
 
 	size_t m_nsockets;
 	size_t m_nthreads;
@@ -92,7 +98,12 @@ topology::topology(
 	Debug() << "ncores: " << m_ncores;
 
 	build_map();
-	link_thiefs();
+
+	link_thieves();
+
+#if STACCATO_DEBUG
+	print();
+#endif
 }
 
 topology::~topology()
@@ -115,8 +126,8 @@ void topology::build_map()
 				if (t > 0 && c == 0 && s + 1 < m_nsockets)
 					continue;
 
-				auto core = get_core_id(s, t, c);
-				m_workers[core] = {s, t, c, id, -1, 0};
+				auto cpu = get_cpu_id(s, t, c);
+				m_workers[cpu] = {id, s, t, c, UNDEF, 0};
 
 				id++;
 				left--;
@@ -130,32 +141,33 @@ void topology::build_map()
 	m_nworkers -= left;
 }
 
-void topology::link_thiefs()
+void topology::link_thieves()
 {
 	for (auto &p : m_workers) {
+		auto &i = p.first;
 		auto &w = p.second;
 
 		size_t left = m_max_thieves;
 
 		if (w.thr == 0 && w.cor == 0 && w.soc + 1 < m_nsockets) {
-			auto t = get_core_id(w.soc + 1, 0, 0);
-			if (link_thief(w.id, t, 2))
+			auto t = get_cpu_id(w.soc + 1, 0, 0);
+			if (link_thief(i, t, 2))
 				left = 1;
 		}
 
 		if (w.thr > 0 && w.cor > 0 && left == 1) {
-			auto t = get_core_id(w.soc, w.thr, w.cor - 1);
-			link_thief(w.id, t, 0);
+			auto t = get_cpu_id(w.soc, w.thr, w.cor - 1);
+			link_thief(i, t, 0);
 			continue;
 		}
 
-		if (left > 0 && link_core_thief(w.id, w.soc, w.thr, w.cor))
+		if (left > 0 && set_thief_at_next_core(i, w))
 			left--;
 
-		while (left > 0 && link_thread_thief(w.id, w.soc, w.thr, w.cor))
+		while (left > 0 && set_thief_at_next_thread(i, w))
 			left--;
 
-		while (left > 0 && link_core_thief(w.id, w.soc, w.thr, w.cor))
+		while (left > 0 && set_thief_at_next_core(i, w))
 			left--;
 	}
 }
@@ -166,7 +178,7 @@ bool topology::link_thief(size_t victim, size_t thief, size_t flags)
 	if (t == m_workers.end())
 		return false;
 
-	if (t->second.victim >= 0)
+	if (t->second.victim != UNDEF)
 		return false;
 
 	t->second.victim = victim;
@@ -175,22 +187,22 @@ bool topology::link_thief(size_t victim, size_t thief, size_t flags)
 	return true;
 }
 
-bool topology::link_thread_thief(size_t id, size_t s, size_t t, size_t c)
+bool topology::set_thief_at_next_thread(size_t victim, const worker_t &w)
 {
-	for (size_t n = t + 1; n < m_nthreads; ++n) {
-		auto thief = get_core_id(s, n, c);
-		if (link_thief(id, thief, 1))
+	for (size_t n = w.thr + 1; n < m_nthreads; ++n) {
+		auto thief = get_cpu_id(w.soc, n, w.cor);
+		if (link_thief(victim, thief, 1))
 			return true;
 	}
 
 	return false;
 }
 
-bool topology::link_core_thief(size_t id, size_t s, size_t t, size_t c)
+bool topology::set_thief_at_next_core(size_t victim, const worker_t &w)
 {
-	for (size_t n = c + 1; n < m_ncores; ++n) {
-		auto thief = get_core_id(s, t, n);
-		if (link_thief(id, thief, 0))
+	for (size_t n = w.cor + 1; n < m_ncores; ++n) {
+		auto thief = get_cpu_id(w.soc, w.thr, n);
+		if (link_thief(victim, thief, 0))
 			return true;
 	}
 
@@ -213,7 +225,7 @@ size_t topology::get_ncores() const
 	return m_ncores;
 }
 
-size_t topology::get_core_id(
+size_t topology::get_cpu_id(
 	size_t soc,
 	size_t thr,
 	size_t cor
@@ -232,19 +244,31 @@ size_t topology::get_nworkers() const
 	return m_nworkers;
 }
 
-// void topology::print() const
-// {
-// 	using namespace std;
-// 	for (auto &p : m_workers) {
-// 		auto w = p.second;
-//
-// 		cout << "#" << w.id << " \t " <<  w.soc << " " << w.thr << " " << w.cor << " : ";
-// 		cout << " f" << w.flags;
-// 		cout << " #" << w.victim;
-//
-// 		cout << "\n";
-// 	}
-// }
+#if STACCATO_DEBUG
+void topology::print(size_t cpu, size_t depth) const
+{
+	using namespace std;
+
+	if (cpu == 0 && depth == 1) {
+		internal::Debug() << "Victim grapth:";
+		cout << "<socket>:<thread>:<core> -- <worker_id> <cpu_id>\n";
+	}
+
+
+	auto w = m_workers.at(cpu);
+	cout << w.soc << ":" << w.thr << ":" << w.cor << " ";
+	for (size_t i = 0; i < depth; ++i)
+		cout << "--";
+	cout << " #" << w.id;
+	cout << " CPU" << cpu;
+	cout << "\n";
+
+	for (auto &p : m_workers) {
+		if (p.second.victim == cpu)
+			print(p.first, depth + 1);
+	}
+}
+#endif
 
 } /* staccato */ 
 

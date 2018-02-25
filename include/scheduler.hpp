@@ -88,19 +88,22 @@ void scheduler<T>::create_workers() {
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i].ready = false;
 
-	for (auto &elem : m_topology.get()) {
+	auto &topo = m_topology.get();
+
+	for (auto &elem : topo) {
 		auto core = elem.first;
 		auto w = elem.second;
 
 		if (w.id == 0) {
 			m_workers[0].thr = nullptr;
-			create_worker(0, core, w.victim, w.flags);
+			create_worker(0, core, -1, w.flags);
 			m_master = m_workers[0].wkr;
 			continue;
 		}
 
+		auto v = topo.at(w.victim).id;
 		m_workers[w.id].thr = new std::thread([=] {
-			create_worker(w.id, core, w.victim, w.flags);
+			create_worker(w.id, core, v, w.flags);
 			m_workers[w.id].wkr->steal_loop();
 		});
 	}
