@@ -9,5 +9,6 @@ add_executable(${target} main.cpp)
 find_path(STACCATO_INC staccato)
 
 target_link_libraries(${target} pthread)
+target_link_libraries(${target} numa)
 link_directories(${target} "${STACCATO_INC}")
 

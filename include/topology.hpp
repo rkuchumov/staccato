@@ -8,6 +8,8 @@
 #include <map>
 #include <limits>
 
+#include <numa.h>
+
 #include "utils.hpp"
 
 namespace staccato
@@ -24,9 +26,9 @@ public:
 
 	virtual ~topology ();
 
-	virtual size_t get_nsockets() const;
-	virtual size_t get_nthreads() const;
-	virtual size_t get_ncores() const;
+	virtual size_t fetch_nsockets();
+	virtual size_t fetch_nthreads();
+	virtual size_t fetch_ncores();
 
 	virtual size_t get_cpu_id(
 		size_t soc,
@@ -83,15 +85,18 @@ topology::topology(
 	size_t max_thieves,
 	size_t threads_threshold
 )
-: m_nworkers(nworkers)
+: m_nsockets(0)
+, m_nthreads(0)
+, m_ncores(0)
+, m_nworkers(nworkers)
 , m_max_thieves(max_thieves)
 , m_thr_threshold(threads_threshold)
 {
 	using namespace internal;
 
-	m_nsockets = get_nsockets();
-	m_nthreads = get_nthreads();
-	m_ncores = get_ncores();
+	fetch_nsockets();
+	fetch_nthreads();
+	fetch_ncores();
 
 	if (m_nworkers == 0)
 		m_nworkers = m_ncores * m_nsockets * m_nthreads;
@@ -213,20 +218,44 @@ bool topology::set_thief_at_next_core(size_t victim, const worker_t &w)
 }
 
 
-size_t topology::get_nsockets() const
+size_t topology::fetch_nsockets()
 {
-	return 1;
+	using namespace internal;
+
+	if (m_nsockets)
+		return m_nsockets;
+
+	if (numa_available() < 0) {
+		Debug() << "NUMA is not avaliable";
+		return 1;
+	}
+
+	auto i = numa_max_node();
+	Debug() << "NUMA max node: " << i;
+	m_nsockets = i + 1;
+
+	return m_nsockets;
 }
 
-size_t topology::get_nthreads() const
+size_t topology::fetch_nthreads()
 {
-	return 2;
+	if (m_nthreads)
+		return m_nthreads;
+
+	// TODO: get number of threads per core
+	m_nthreads = 2;
+	return m_nthreads;
 }
 
-size_t topology::get_ncores() const
+size_t topology::fetch_ncores()
 {
-	return std::thread::hardware_concurrency() /
-		(get_nsockets() * get_nthreads());
+	if (m_ncores)
+		return m_ncores;
+
+	m_ncores = std::thread::hardware_concurrency() /
+		(fetch_nsockets() * fetch_nthreads());
+
+	return m_ncores;
 }
 
 size_t topology::get_cpu_id(
@@ -254,27 +283,29 @@ void topology::print(size_t cpu, size_t depth) const
 	using namespace std;
 	using namespace internal;
 
+	auto fp = stderr;
+
 	if (cpu == 0 && depth == 1) {
 		Debug() << "Victim grapth:";
-		cout << "<cpu> <socket>:<thread>:<core> -- <worker_id> <flags>\n";
+		fprintf(fp, "<cpu> <socket>:<thread>:<core> -- <worker_id> <flags>\n");
 	}
 
 	auto w = m_workers.at(cpu);
-	fprintf(stdout, "CPU%-3lu ", cpu);
-	fprintf(stdout, "%1lu:", w.soc);
-	fprintf(stdout, "%1lu:", w.thr);
-	fprintf(stdout, "%-2lu", w.cor);
+	fprintf(fp, "CPU%-3lu ", cpu);
+	fprintf(fp, "%1lu:", w.soc);
+	fprintf(fp, "%1lu:", w.thr);
+	fprintf(fp, "%-2lu", w.cor);
 
 	for (size_t i = 0; i < depth; ++i)
-		cout << "--";
+		fprintf(fp, "--");
 
-	cout << " #" << w.id;
+	fprintf(fp, " #%lu", w.id);
 	if (w.flags & worker_flags_e::distant_victim)
-		cout << " distant_victim";
+		fprintf(fp, " distant_victim");
 	if (w.flags & worker_flags_e::sibling_victim)
-		cout << " sibling_victim";
+		fprintf(fp, " sibling_victim");
 
-	cout << "\n";
+	fprintf(fp, "\n");
 
 	for (auto &p : m_workers) {
 		if (p.second.victim == cpu)
