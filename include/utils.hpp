@@ -48,10 +48,10 @@ namespace staccato {
 namespace internal {
 
 enum worker_flags_e {
+	none           = 0x0,
 	sibling_victim = 0x1,
-	socket_master  = 0x2
+	distant_victim = 0x2
 };
-
 
 inline size_t cache_align(size_t x, size_t to = STACCATO_CACHE_SIZE) {
 	return (x + (to - 1)) & ~(to - 1);

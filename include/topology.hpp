@@ -56,7 +56,11 @@ public:
 protected:
 	void build_map();
 	void link_thieves();
-	bool link_thief(size_t victim, size_t thief, size_t flags = 0);
+	bool link_thief(
+		size_t victim,
+		size_t thief,
+		size_t flags = internal::worker_flags_e::none
+	);
 	bool set_thief_at_next_core(size_t victim, const worker_t &w);
 	bool set_thief_at_next_thread(size_t victim, const worker_t &w);
 
@@ -151,13 +155,13 @@ void topology::link_thieves()
 
 		if (w.thr == 0 && w.cor == 0 && w.soc + 1 < m_nsockets) {
 			auto t = get_cpu_id(w.soc + 1, 0, 0);
-			if (link_thief(i, t, 2))
+			if (link_thief(i, t, internal::worker_flags_e::distant_victim))
 				left = 1;
 		}
 
 		if (w.thr > 0 && w.cor > 0 && left == 1) {
 			auto t = get_cpu_id(w.soc, w.thr, w.cor - 1);
-			link_thief(i, t, 0);
+			link_thief(i, t);
 			continue;
 		}
 
@@ -191,7 +195,7 @@ bool topology::set_thief_at_next_thread(size_t victim, const worker_t &w)
 {
 	for (size_t n = w.thr + 1; n < m_nthreads; ++n) {
 		auto thief = get_cpu_id(w.soc, n, w.cor);
-		if (link_thief(victim, thief, 1))
+		if (link_thief(victim, thief, internal::worker_flags_e::sibling_victim))
 			return true;
 	}
 
@@ -202,7 +206,7 @@ bool topology::set_thief_at_next_core(size_t victim, const worker_t &w)
 {
 	for (size_t n = w.cor + 1; n < m_ncores; ++n) {
 		auto thief = get_cpu_id(w.soc, w.thr, n);
-		if (link_thief(victim, thief, 0))
+		if (link_thief(victim, thief))
 			return true;
 	}
 

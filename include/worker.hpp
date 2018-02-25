@@ -226,14 +226,17 @@ void worker<T>::steal_loop()
 			continue;
 		}
 
-		if (was_empty) {
-			if (vtail->get_next()) {
-				vtail = vtail->get_next();
-				now_stolen = 0;
-			}
-		} else {
+		if (!was_empty) {
 			now_stolen++;
+			continue;
 		}
+
+		if (vtail->get_next())
+			vtail = vtail->get_next();
+		else
+			vtail = vhead;
+
+		now_stolen = 0;
 	}
 }
 
@@ -274,8 +277,10 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (nstolen == 0)
 			return;
 
-		if (!(m_flags & worker_flags_e::socket_master))
-			t = steal_task(tail, &victim);
+		if (m_flags & worker_flags_e::distant_victim)
+			continue;
+
+		t = steal_task(tail, &victim);
 	}
 }
 
