@@ -89,10 +89,9 @@ topology::topology(
 {
 	using namespace internal;
 
-	m_nsockets = 1;
-	m_nthreads = 2;
-	m_ncores = std::thread::hardware_concurrency() /
-		(m_nsockets * m_nthreads);
+	m_nsockets = get_nsockets();
+	m_nthreads = get_nthreads();
+	m_ncores = get_ncores();
 
 	if (m_nworkers == 0)
 		m_nworkers = m_ncores * m_nsockets * m_nthreads;
@@ -216,17 +215,18 @@ bool topology::set_thief_at_next_core(size_t victim, const worker_t &w)
 
 size_t topology::get_nsockets() const
 {
-	return m_nsockets;
+	return 1;
 }
 
 size_t topology::get_nthreads() const
 {
-	return m_nthreads;
+	return 2;
 }
 
 size_t topology::get_ncores() const
 {
-	return m_ncores;
+	return std::thread::hardware_concurrency() /
+		(get_nsockets() * get_nthreads());
 }
 
 size_t topology::get_cpu_id(
@@ -252,19 +252,28 @@ size_t topology::get_nworkers() const
 void topology::print(size_t cpu, size_t depth) const
 {
 	using namespace std;
+	using namespace internal;
 
 	if (cpu == 0 && depth == 1) {
-		internal::Debug() << "Victim grapth:";
-		cout << "<socket>:<thread>:<core> -- <worker_id> <cpu_id>\n";
+		Debug() << "Victim grapth:";
+		cout << "<cpu> <socket>:<thread>:<core> -- <worker_id> <flags>\n";
 	}
 
-
 	auto w = m_workers.at(cpu);
-	cout << w.soc << ":" << w.thr << ":" << w.cor << " ";
+	fprintf(stdout, "CPU%-3lu ", cpu);
+	fprintf(stdout, "%1lu:", w.soc);
+	fprintf(stdout, "%1lu:", w.thr);
+	fprintf(stdout, "%-2lu", w.cor);
+
 	for (size_t i = 0; i < depth; ++i)
 		cout << "--";
+
 	cout << " #" << w.id;
-	cout << " CPU" << cpu;
+	if (w.flags & worker_flags_e::distant_victim)
+		cout << " distant_victim";
+	if (w.flags & worker_flags_e::sibling_victim)
+		cout << " sibling_victim";
+
 	cout << "\n";
 
 	for (auto &p : m_workers) {
