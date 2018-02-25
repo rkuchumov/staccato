@@ -294,7 +294,7 @@ void topology::print(size_t cpu, size_t depth) const
 	fprintf(fp, "CPU%-3lu ", cpu);
 	fprintf(fp, "%1lu:", w.soc);
 	fprintf(fp, "%1lu:", w.thr);
-	fprintf(fp, "%-2lu", w.cor);
+	fprintf(fp, "%-2lu ", w.cor);
 
 	for (size_t i = 0; i < depth; ++i)
 		fprintf(fp, "--");

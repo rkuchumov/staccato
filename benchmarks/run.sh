@@ -1,13 +1,15 @@
 #!/bin/bash
 
+runs=6
+threads=({1..56})
 
 args_fib="42"
 args_dfs="9 9"
-args_mergesort="100000000"
+args_mergesort="50000000"
 args_matmul="3000"
 args_blkmul="8"
 
-runs=3
+runs=1
 threads=(4)
 
 args_fib="35"
@@ -22,14 +24,15 @@ benchmarks=(
 	"staccato mergesort _threads_ $args_mergesort"
 	"staccato matmul _threads_ $args_matmul"
 	"staccato blkmul _threads_ $args_blkmul"
-	# "cilk fib _threads_ $args_fib"
-	# "cilk dfs _threads_ $args_dfs"
-	# "cilk mergesort _threads_ $args_mergesort"
-	# "cilk matmul _threads_ $args_matmul"
-	# "cilk blkmul _threads_ $args_blkmul"
+	"cilk fib _threads_ $args_fib"
+	"cilk dfs _threads_ $args_dfs"
+	"cilk mergesort _threads_ $args_mergesort"
+	"cilk matmul _threads_ $args_matmul"
+	"cilk blkmul _threads_ $args_blkmul"
 )
 
-export CXXFLAGS=-I\ ~/.local/include/\ -DSTACCATO_DEBUG=1
+# export CXXFLAGS=-I\ ~/.local/include/\ -DSTACCATO_DEBUG=1
+export CXXFLAGS=-I\ ~/.local/include/
 
 function get_integer() {
 	echo "$1" | grep "$2" | grep -o "[0-9].*"

@@ -347,7 +347,14 @@ int main(int argc, char *argv[])
 	auto start = system_clock::now();
 
 	{
-		topology topo(nthreads);
+		auto degree = 1;
+		if (nthreads > 9)
+			degree = 2;
+		if (nthreads > 15)
+			degree = 3;
+		if (nthreads > 41)
+			degree = 4;
+		topology topo(nthreads, degree, 3);
 		scheduler<OperationTask> sh(8, topo);
 		sh.spawn(new(sh.root()) OperationTask(A, B, R, nblocks));
 		sh.wait();
