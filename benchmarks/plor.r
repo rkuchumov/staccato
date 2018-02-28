@@ -15,38 +15,46 @@ read_input <- function (path) {
 my_plot <- function (data, name, title = 'atata') {
     d <- data[data$name==name,]
 
-    p <- ggplot(d, aes(x = threads, y = time, group = sched, color = sched)) +
+    # t <- log(time)
+    p <- ggplot(d, aes(x = threads, y = log(time), group = sched, color = sched)) +
         geom_line() +
         geom_point() +
-        geom_errorbar(
-            aes(ymin = time - sdev, ymax = time + sdev),
-            width = .2,
-            position = position_dodge(0.05)
-        ) +
+        # geom_errorbar(
+        #     aes(ymin = t - sdev, ymax = t + sdev),
+        #     width = .2,
+        #     position = position_dodge(0.05)
+        # ) +
         labs(
             title = title,
             x = 'Number of threads',
-            y = 'Execution time (us)'
+            y = 'Execution time (us), log scale'
         ) +
-        scale_color_manual(values=c('#999999','#E69F00'))
+        scale_color_manual(values=c('#999999','#E69F00', '#4286f4'))
 
     return(p)
 }
 
-save_plot <- function(p, path) {
+process <- function (data, benchmark, title, output) {
+    p <- my_plot(data, benchmark, title)
+
+    path <- paste(output, '-', benchmark, '.png', sep='')
     ggsave(path, p, width = 10, height = 6)
 }
 
+
 args = commandArgs(trailingOnly=TRUE)
 if (length(args) == 0) {
-    stop("Usage: ./plot.r <data_file> <benchmark>", call.=FALSE)
+    stop("Usage: ./plot.r <data_file>", call.=FALSE)
 }
 
 input <- args[1]
-benchmark <- args[2]
-output <- paste(input, '-', benchmark, '.png', sep='')
 
 data <- read_input(input)
-p <- my_plot(data, benchmark)
-save_plot(p, output)
+
+process(data, 'fib', 'Fibonacci Number (42)', input)
+process(data, 'dfs', 'Depth First Search (9^9 vertices)', input)
+process(data, 'matmul', 'Matrix Multiplication (3000x3000)', input)
+process(data, 'mergesort', 'Merge Sort (5*10^8 of 4 byte integers)', input)
+process(data, 'blkmul', 'Block Matrix Multiplication (4096*4096)', input)
+
 
