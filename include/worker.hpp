@@ -56,7 +56,7 @@ private:
 
 	task_deque<T> *get_victim();
 
-	// task<T> *steal_task(task_deque<T> *tail, task_deque<T> **victim);
+	task<T> *steal_task(task_deque<T> *tail, task_deque<T> **victim);
 
 	const size_t m_id;
 	const size_t m_taskgraph_degree;
@@ -309,40 +309,61 @@ void worker<T>::local_loop(task_deque<T> *tail)
 			continue;
 
 		std::this_thread::yield();
-		// t = steal_task(tail, &victim);
-        //
-		// if (!t)
-		// 	std::this_thread::yield();
+		t = steal_task(tail, &victim);
+
+		if (!t)
+			std::this_thread::yield();
 	}
 }
 
-// template <typename T>
-// task<T> *worker<T>::steal_task(task_deque<T> *tail, task_deque<T> **victim)
-// {
-// 	if (load_relaxed(m_nvictims) == 0)
-// 		return nullptr;
-//
-// 	auto v = get_victim();
-//
-// 	bool was_empty = false;
-//
-// 	auto t = v->steal(&was_empty);
-//
-// #if STACCATO_DEBUG
-// 	if (t)
-// 		COUNT(steal2);
-// 	else if (was_empty)
-// 		COUNT(steal2_empty);
-// 	else
-// 		COUNT(steal2_race);
-// #endif
-//
-// 	if (!t)
-// 		return nullptr;
-//
-// 	*victim = v;
-// 	return t;
-// }
+template <typename T>
+task<T> *worker<T>::steal_task(task_deque<T> *, task_deque<T> **victim)
+{
+	if (load_relaxed(m_nvictims) == 0)
+		return nullptr;
+
+	auto vhead = get_victim();
+	auto vtail = vhead;
+	size_t now_stolen = 0;
+
+	while (true) {
+		if (now_stolen >= m_taskgraph_degree - 1) {
+			if (vtail->get_next()) {
+				vtail = vtail->get_next();
+				now_stolen = 0;
+			}
+		}
+
+		bool was_empty = false;
+		auto t = vtail->steal(&was_empty);
+
+#if STACCATO_DEBUG
+		if (t)
+			COUNT(steal2);
+		else if (was_empty)
+			COUNT(steal2_empty);
+		else
+			COUNT(steal2_race);
+#endif
+
+		if (t) {
+			*victim = vtail;
+			return t;
+		}
+
+		if (!was_empty) {
+			now_stolen++;
+			continue;
+		}
+
+		if (vtail->get_next())
+			vtail = vtail->get_next();
+		else
+			return nullptr;
+
+		now_stolen = 0;
+	}
+}
 
 #if STACCATO_DEBUG
 
