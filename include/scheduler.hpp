@@ -81,7 +81,8 @@ scheduler<T>::scheduler(
 }
 
 template <typename T>
-void scheduler<T>::create_workers() {
+void scheduler<T>::create_workers()
+{
 	using namespace internal;
 
 	m_workers = new worker_t[m_nworkers];
@@ -101,11 +102,24 @@ void scheduler<T>::create_workers() {
 			continue;
 		}
 
-		auto v = topo.at(w.victim).id;
+		// auto v = topo.at(w.victim).id;
 		m_workers[w.id].thr = new std::thread([=] {
-			create_worker(w.id, core, v, w.flags);
+			create_worker(w.id, core, -1, w.flags);
 			m_workers[w.id].wkr->steal_loop();
 		});
+	}
+
+	for (size_t i = 0; i < m_nworkers; ++i) {
+		while (!m_workers[i].ready)
+			std::this_thread::yield();
+	}
+
+	for (size_t i = 0; i < m_nworkers; ++i) {
+		for (size_t j = 0; j < m_nworkers; ++j) {
+			if (i == j)
+				continue;
+			m_workers[i].wkr->cache_victim(m_workers[j].wkr);
+		}
 	}
 }
 
@@ -124,21 +138,21 @@ void scheduler<T>::create_worker(size_t id, size_t core_id, int victim_id, size_
 
 	auto wkr = alloc->alloc<worker<T>>();
 	new(wkr)
-		worker<T>(id, alloc, m_taskgraph_degree, m_taskgraph_height, flags);
+		worker<T>(id, alloc, m_nworkers, m_taskgraph_degree, m_taskgraph_height, flags);
 
-	pin_thread(core_id);
+	// pin_thread(core_id);
 
 	m_workers[id].alloc = alloc;
 	m_workers[id].wkr = wkr;
 	m_workers[id].ready = true;
 
-	if (victim_id >= 0) {
-		while (!m_workers[victim_id].ready)
-			std::this_thread::yield();
-
-		auto v = m_workers[victim_id].wkr;
-		wkr->set_victim(v);
-	}
+	// if (victim_id >= 0) {
+	// 	while (!m_workers[victim_id].ready)
+	// 		std::this_thread::yield();
+    //
+	// 	auto v = m_workers[victim_id].wkr;
+	// 	wkr->set_victim(v);
+	// }
 }
 
 template <typename T>

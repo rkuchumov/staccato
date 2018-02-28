@@ -107,10 +107,10 @@ topology::topology(
 
 	build_map();
 
-	link_thieves();
+	// link_thieves();
 
 #if STACCATO_DEBUG
-	print();
+	// print();
 #endif
 }
 

@@ -9,17 +9,17 @@ args_mergesort="50000000"
 args_matmul="3000"
 args_blkmul="8"
 
-runs=1
-threads=(4)
+runs=2
+threads=(3 4)
 
-args_fib="35"
-args_dfs="7 7"
+args_fib="42"
+args_dfs="9 9"
 args_mergesort="100000"
 args_matmul="800"
 args_blkmul="6"
 
 benchmarks=(
-	# "staccato fib _threads_ $args_fib"
+	"staccato fib _threads_ $args_fib"
 	# "staccato dfs _threads_ $args_dfs"
 	# "staccato mergesort _threads_ $args_mergesort"
 	# "staccato matmul _threads_ $args_matmul"
@@ -29,11 +29,11 @@ benchmarks=(
 	# "cilk mergesort _threads_ $args_mergesort"
 	# "cilk matmul _threads_ $args_matmul"
 	# "cilk blkmul _threads_ $args_blkmul"
-	"tbb fib _threads_ $args_fib"
-	"tbb dfs _threads_ $args_dfs"
-	"tbb mergesort _threads_ $args_mergesort"
-	"tbb matmul _threads_ $args_matmul"
-	"tbb blkmul _threads_ $args_blkmul"
+	# "tbb fib _threads_ $args_fib"
+	# "tbb dfs _threads_ $args_dfs"
+	# "tbb mergesort _threads_ $args_mergesort"
+	# "tbb matmul _threads_ $args_matmul"
+	# "tbb blkmul _threads_ $args_blkmul"
 )
 
 # export CXXFLAGS=-I\ ~/.local/include/\ -DSTACCATO_DEBUG=1
