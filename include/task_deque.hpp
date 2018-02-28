@@ -5,8 +5,8 @@
 #include <cstddef>
 #include <cstring>
 
-#include "constants.hpp"
 #include "utils.hpp"
+#include "debug.hpp"
 #include "lifo_allocator.hpp"
 
 namespace staccato
@@ -27,7 +27,6 @@ public:
 	void set_victim(task_deque<T> *d);
 
 	task_deque<T> *get_next();
-	task_deque<T> *get_victim();
 
 	void return_stolen();
 
@@ -44,7 +43,6 @@ private:
 	T * m_array;
 
 	task_deque<T> *m_next;
-	task_deque<T> *m_victim;
 
 	STACCATO_ALIGN std::atomic_size_t m_nstolen;
 	STACCATO_ALIGN std::atomic_size_t m_top;
@@ -56,12 +54,11 @@ task_deque<T>::task_deque(size_t size, T *mem)
 : m_mask(size - 1)
 , m_array(mem)
 , m_next(nullptr)
-, m_victim(nullptr)
 , m_nstolen(0)
 , m_top(1)
 , m_bottom(1)
 {
-	ASSERT(is_pow2(size), "Deque size is not power of 2");
+	STACCATO_ASSERT(is_pow2(size), "Deque size is not power of 2");
 }
 
 template <typename T>
@@ -75,21 +72,9 @@ void task_deque<T>::set_next(task_deque<T> *d)
 }
 
 template <typename T>
-void task_deque<T>::set_victim(task_deque<T> *d)
-{
-	m_victim = d;
-}
-
-template <typename T>
 task_deque<T> *task_deque<T>::get_next()
 {
 	return m_next;
-}
-
-template <typename T>
-task_deque<T> *task_deque<T>::get_victim()
-{
-	return m_victim;
 }
 
 template <typename T>
@@ -170,7 +155,7 @@ T *task_deque<T>::steal(bool *was_empty)
 template <typename T>
 void task_deque<T>::return_stolen()
 {
-	ASSERT(m_nstolen > 0, "Decrementing stolen count when there are no stolen tasks");
+	STACCATO_ASSERT(m_nstolen > 0, "Decrementing stolen count when there are no stolen tasks");
 	dec_relaxed(m_nstolen);
 }
 

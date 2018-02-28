@@ -1,17 +1,59 @@
-#ifndef STACCATO_UTILS_H
-#define STACCATO_UTILS_H
+#ifndef UTILS_HPP_CSPTFG9B
+#define UTILS_HPP_CSPTFG9B
 
-#include <iostream>
 #include <cassert>
-#include <iostream>
-#include <sstream>
-#include <thread>
-#include <iomanip>
+#include <cstdint>
 
-#include "constants.hpp"
+#ifndef STACCATO_DEBUG
+#	define STACCATO_DEBUG 0
+#endif // STACCATO_DEBUG
+
+#if !defined(LEVEL1_DCACHE_LINESIZE) || LEVEL1_DCACHE_LINESIZE == 0
+#	define STACCATO_CACHE_SIZE 64
+#else
+#	define STACCATO_CACHE_SIZE LEVEL1_DCACHE_LINESIZE
+#endif // LEVEL1_DCACHE_LINESIZE
+
+// XXX: not tested
+#if __cplusplus > 199711L
+#	define STACCATO_TLS thread_local
+#elif __STDC_VERSION__ >= 201112 && !defined __STDC_NO_THREADS__
+#	define STACCATO_TLS _Thread_local
+#elif defined _WIN32 && ( \
+      defined _MSC_VER || \
+      defined __ICL || \
+      defined __DMC__ || \
+      defined __BORLANDC__ )
+#	define STACCATO_TLS __declspec(thread) 
+#elif defined __GNUC__ || \
+      defined __SUNPRO_C || \
+      defined __xlC__
+#	define STACCATO_TLS __thread
+#else
+#	define STACCATO_TLS thread_local
+#	warning "Cannot define thread_local"
+#endif
+
+// XXX: not tested
+#if __cplusplus > 199711L
+#	define STACCATO_ALIGN alignas(STACCATO_CACHE_SIZE)
+#elif defined _WIN32 && ( \
+      defined _MSC_VER || \
+      defined __ICL || \
+      defined __DMC__ || \
+      defined __BORLANDC__ )
+#	define STACCATO_ALIGN __declspec(align(STACCATO_CACHE_SIZE)) 
+#elif defined __GNUC__ || \
+      defined __SUNPRO_C || \
+      defined __xlC__
+#	define STACCATO_ALIGN __attribute__(aligned(STACCATO_CACHE_SIZE))
+#else
+#	define STACCATO_ALIGN alignas(STACCATO_CACHE_SIZE)
+#	warning "Cannot define alignas()"
+#endif
 
 #if STACCATO_DEBUG
-#   define ASSERT(condition, message) \
+#   define STACCATO_ASSERT(condition, message) \
     do { \
         if (!(condition)) { \
             std::cerr << "Assertion `" #condition "` failed in " << __FILE__ \
@@ -20,9 +62,10 @@
         } \
     } while (false)
 #else
-#   define ASSERT(condition, message) do { } while (false)
+#   define STACCATO_ASSERT(condition, message) do { } while (false)
 #endif
 
+// TODO: define inline functions
 #define load_relaxed(var) (var).load(std::memory_order_relaxed)
 #define load_acquire(var) (var).load(std::memory_order_acquire)
 #define load_consume(var) (var).load(std::memory_order_consume)
@@ -42,20 +85,10 @@
 #define dec_relaxed_p(var) (var)->fetch_sub(1, std::memory_order_relaxed)
 #define inc_relaxed_p(var) (var)->fetch_add(1, std::memory_order_relaxed)
 
-#define COUNT(e) m_counter.count(counter::e)
-
-namespace staccato {
-namespace internal {
-
-enum worker_flags_e {
-	none           = 0x0,
-	sibling_victim = 0x1,
-	distant_victim = 0x2
-};
-
-inline size_t cache_align(size_t x, size_t to = STACCATO_CACHE_SIZE) {
-	return (x + (to - 1)) & ~(to - 1);
-}
+namespace staccato
+{
+namespace internal
+{
 
 inline uint32_t xorshift_rand() {
 	STACCATO_TLS static uint32_t x = 2463534242;
@@ -82,56 +115,7 @@ inline uint64_t next_pow2(uint64_t x)
 	return x + 1;
 }
 
-class Debug
-{
-public:
-	Debug(size_t indent = 0)
-	: m_printed(false)
-	, m_indent(indent)
-	{
-		m_buffer << "[STACCATO]";
-
-		m_buffer << "[";
-		m_buffer << std::setfill('0') << std::setw(5)
-			<< std::hash<std::thread::id>()(std::this_thread::get_id()) % 100000;
-		m_buffer << "] ";
-
-		for (size_t i = 0; i < m_indent; ++i) {
-			m_buffer << "   ";
-		}
-	}
-
-	~Debug()
-	{
-		if (!m_printed)
-			print();
-	}
-
-	void print()
-	{
-	// TODO: make it thread safe
-#if STACCATO_DEBUG
-		m_buffer << std::endl;
-		std::cerr << m_buffer.str();
-#endif
-		m_printed = true;
-	}
-
-	template <typename T>
-	Debug & operator<<(const T &value)
-	{
-		m_buffer << value;
-		return *this;
-	}
-
-private:
-	std::ostringstream m_buffer;
-	bool m_printed;
-	size_t m_indent;
-};
-	
 } /* internal */ 
 } /* staccato */ 
 
-#endif /* end of include guard: STACCATO_UTILS_H */
-
+#endif /* end of include guard: UTILS_HPP_CSPTFG9B */

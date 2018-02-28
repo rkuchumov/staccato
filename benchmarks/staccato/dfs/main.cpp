@@ -64,16 +64,7 @@ int main(int argc, char *argv[])
 	auto start = system_clock::now();
 
 	{
-		auto degree = 1; 
-		if (nthreads > 7)
-			degree = 2;
-		if (nthreads > 18)
-			degree = 3;
-		if (nthreads > 40)
-			degree = 4;
-
-		topology topo(nthreads, degree, 4);
-		scheduler<DFSTask> sh(breadth, topo);
+		scheduler<DFSTask> sh(breadth, nthreads);
 		sh.spawn(new(sh.root()) DFSTask(depth, breadth, &answer));
 		sh.wait();
 	}

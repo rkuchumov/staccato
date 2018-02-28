@@ -7,6 +7,8 @@
 
 #include "utils.hpp"
 
+#define COUNT(e) m_counter.count(counter::e)
+
 namespace staccato
 {
 namespace internal

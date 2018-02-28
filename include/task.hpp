@@ -6,7 +6,6 @@
 #include <functional>
 #include <cstdlib>
 
-#include "constants.hpp"
 #include "task_deque.hpp"
 #include "utils.hpp"
 

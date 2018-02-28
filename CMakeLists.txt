@@ -27,9 +27,9 @@ set(CMAKE_CXX_STANDARD 11)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set(HEADERS
-	include/constants.hpp
 	include/scheduler.hpp
 	include/task.hpp
+	include/debug.hpp
 	include/task_deque.hpp
 	include/lifo_allocator.hpp
 	include/worker.hpp
@@ -44,6 +44,6 @@ install(
 )
 
 # enable_testing()
-# add_subdirectory(examples/01-class)
+add_subdirectory(examples/01-class)
 # add_subdirectory(tests)
 

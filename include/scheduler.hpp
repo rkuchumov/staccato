@@ -8,13 +8,10 @@
 #include <functional>
 #include <mutex>
 
-// TODO: check if present
-#include <pthread.h>
-
-#include "constants.hpp"
 #include "utils.hpp"
+#include "debug.hpp"
+
 #include "worker.hpp"
-#include "topology.hpp"
 #include "lifo_allocator.hpp"
 #include "counter.hpp"
 
@@ -31,7 +28,7 @@ public:
 
 	scheduler (
 		size_t taskgraph_degree,
-		const topology &topo = topology(),
+		size_t nworkers = 0,
 		size_t taskgraph_height = 1
 	);
 
@@ -50,14 +47,12 @@ private:
 	};
 
     inline size_t predict_page_size() const;
-	void pin_thread(size_t core_id);
 
 	void create_workers();
-	void create_worker(size_t id, size_t core_id, int victim_id, size_t flags);
+	void create_worker(size_t id);
 
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
-	const topology m_topology;
 
 	size_t m_nworkers;
 	worker_t *m_workers;
@@ -67,15 +62,17 @@ private:
 template <typename T>
 scheduler<T>::scheduler(
 	size_t taskgraph_degree,
-	const topology &topo,
+	size_t nworkers,
 	size_t taskgraph_height
 )
 : m_taskgraph_degree(internal::next_pow2(taskgraph_degree))
 , m_taskgraph_height(taskgraph_height)
-, m_topology(topo)
-, m_nworkers(topo.get_nworkers())
+, m_nworkers(nworkers)
 {
 	internal::Debug() << "Scheduler is working in debug mode";
+
+	if (m_nworkers == 0)
+		m_nworkers = std::thread::hardware_concurrency();
 
 	create_workers();
 }
@@ -89,30 +86,20 @@ void scheduler<T>::create_workers()
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i].ready = false;
 
-	auto &topo = m_topology.get();
+	create_worker(0);
+	m_workers[0].thr = nullptr;
+	m_master = m_workers[0].wkr;
 
-	for (auto &elem : topo) {
-		auto core = elem.first;
-		auto w = elem.second;
-
-		if (w.id == 0) {
-			m_workers[0].thr = nullptr;
-			create_worker(0, core, -1, w.flags);
-			m_master = m_workers[0].wkr;
-			continue;
-		}
-
-		// auto v = topo.at(w.victim).id;
-		m_workers[w.id].thr = new std::thread([=] {
-			create_worker(w.id, core, -1, w.flags);
-			m_workers[w.id].wkr->steal_loop();
+	for (size_t i = 1; i < m_nworkers; ++i) {
+		m_workers[i].thr = new std::thread([=] {
+			create_worker(i);
+			m_workers[i].wkr->steal_loop();
 		});
 	}
 
-	for (size_t i = 0; i < m_nworkers; ++i) {
+	for (size_t i = 0; i < m_nworkers; ++i)
 		while (!m_workers[i].ready)
 			std::this_thread::yield();
-	}
 
 	for (size_t i = 0; i < m_nworkers; ++i) {
 		for (size_t j = 0; j < m_nworkers; ++j) {
@@ -124,35 +111,21 @@ void scheduler<T>::create_workers()
 }
 
 template <typename T>
-void scheduler<T>::create_worker(size_t id, size_t core_id, int victim_id, size_t flags)
+void scheduler<T>::create_worker(size_t id)
 {
 	using namespace internal;
 
-	Debug() 
-		<< "Init worker #" << id 
-		<< " at CPU" << core_id
-		<< " victim #" << victim_id
-		<< " flags: " << flags;
+	Debug() << "Init worker #" << id;
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
 	auto wkr = alloc->alloc<worker<T>>();
 	new(wkr)
-		worker<T>(id, alloc, m_nworkers, m_taskgraph_degree, m_taskgraph_height, flags);
-
-	// pin_thread(core_id);
+		worker<T>(id, alloc, m_nworkers, m_taskgraph_degree, m_taskgraph_height);
 
 	m_workers[id].alloc = alloc;
 	m_workers[id].wkr = wkr;
 	m_workers[id].ready = true;
-
-	// if (victim_id >= 0) {
-	// 	while (!m_workers[victim_id].ready)
-	// 		std::this_thread::yield();
-    //
-	// 	auto v = m_workers[victim_id].wkr;
-	// 	wkr->set_victim(v);
-	// }
 }
 
 template <typename T>
@@ -168,21 +141,9 @@ inline size_t scheduler<T>::predict_page_size() const
 }
 
 template <typename T>
-void scheduler<T>::pin_thread(size_t core_id)
-{
-	cpu_set_t cpuset;
-	CPU_ZERO(&cpuset);
-	CPU_SET(core_id, &cpuset);
-
-	pthread_t current_thread = pthread_self();    
-	pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-}
-
-template <typename T>
 scheduler<T>::~scheduler()
 {
-	for (size_t i = 1; i < m_nworkers; ++i)
-	{
+	for (size_t i = 1; i < m_nworkers; ++i) {
 		while (!m_workers[i].ready)
 			std::this_thread::yield();
 

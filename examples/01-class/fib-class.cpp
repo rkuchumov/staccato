@@ -55,8 +55,7 @@ int main(int argc, char *argv[])
 		nthreads = thread::hardware_concurrency();
 
 	{
-		topology topo(nthreads);
-		scheduler<FibTask> sh(2, topo, n);
+		scheduler<FibTask> sh(nthreads, 2, n);
 		sh.spawn(new(sh.root()) FibTask(n, &answer));
 		sh.wait();
 	}
