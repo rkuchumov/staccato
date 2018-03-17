@@ -51,10 +51,10 @@ input <- args[1]
 
 data <- read_input(input)
 
-process(data, 'fib', 'Fibonacci Number (42)', input)
-process(data, 'dfs', 'Depth First Search (9^9 vertices)', input)
-process(data, 'matmul', 'Matrix Multiplication (3000x3000)', input)
-process(data, 'mergesort', 'Merge Sort (5*10^8 of 4 byte integers)', input)
+process(data, 'fib', 'Fibonacci Number (43)', input)
+process(data, 'dfs', 'Depth First Search (9^10 vertices)', input)
+process(data, 'matmul', 'Matrix Multiplication (3500x3500)', input)
+process(data, 'mergesort', 'Merge Sort (10^9 of 4 byte integers)', input)
 process(data, 'blkmul', 'Block Matrix Multiplication (4096*4096)', input)
 
 
