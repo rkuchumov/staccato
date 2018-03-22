@@ -12,7 +12,7 @@ using namespace tbb;
 class FibTask: public task
 {
 public:
-	FibTask (int n_, long *sum_): n(n_), sum(sum_)
+	FibTask (int n_, unsigned long *sum_): n(n_), sum(sum_)
 	{ }
 
 	task *execute() {
@@ -21,7 +21,7 @@ public:
 			return nullptr;
 		}
 
-		long x, y;
+		unsigned long x, y;
 		FibTask &a = *new(allocate_child()) FibTask(n - 1, &x);
 		FibTask &b = *new(allocate_child()) FibTask(n - 2, &y);
 
@@ -39,13 +39,28 @@ public:
 
 private:
 	int n;
-	long *sum;
+	unsigned long *sum;
 };
+
+void fib_seq(int n, unsigned long *sum) {
+	if (n <= 2) {
+		*sum = 1;
+		return;
+	}
+
+	unsigned long x;
+	fib_seq(n - 1, &x);
+
+	unsigned long y;
+	fib_seq(n - 2, &y);
+
+	*sum = x + y;
+}
 
 int main(int argc, char *argv[])
 {
 	size_t n = 40;
-	long answer;
+	unsigned long answer;
 	size_t nthreads = 0;
 
 	if (argc >= 2)
@@ -54,6 +69,15 @@ int main(int argc, char *argv[])
 		n = atoi(argv[2]);
 	if (nthreads == 0)
 		nthreads = thread::hardware_concurrency();
+
+	auto start_noshed = system_clock::now();
+
+	if (nthreads == 1)
+		fib_seq(n, &answer);
+
+	auto stop_noshed = system_clock::now();
+	auto noshed_time = duration_cast<microseconds>(stop_noshed - start_noshed).count();
+	cout << "Seq time(us):   " << noshed_time << "\n";
 
 	auto start = system_clock::now();
 
@@ -67,12 +91,17 @@ int main(int argc, char *argv[])
 
 	auto stop = system_clock::now();
 
+	auto shed_time = duration_cast<microseconds>(stop - start).count();
+
 	cout << "Scheduler:  tbb\n";
 	cout << "Benchmark:  fib\n";
 	cout << "Threads:    " << nthreads << "\n";
 	cout << "Time(us):   " << duration_cast<microseconds>(stop - start).count() << "\n";
 	cout << "Input:      " << n << "\n";
 	cout << "Output:     " << answer << "\n";
+
+	if (nthreads == 1)
+		cout << "Overhead:   " << static_cast<double>(shed_time) / noshed_time << "\n";
 
 	return 0;
 }

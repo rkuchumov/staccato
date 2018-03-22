@@ -46,72 +46,49 @@ bool check() {
 	return sum_before == s;
 }
 
-class SortTask: public task<SortTask>
+void seq_matmul(size_t left, size_t right)
 {
-public:
-	SortTask (size_t left, size_t right)
-	: m_left(left)
-	, m_right(right)
-	{ }
+	if (right - left <= 1)
+		return;
 
-	void execute() {
-		if (m_right - m_left <= 1)
-			return;
+	size_t mid = (left + right) / 2;
+	size_t l = left;
+	size_t r = mid;
 
-		size_t mid = (m_left + m_right) / 2;
-		size_t l = m_left;
-		size_t r = mid;
+	seq_matmul(left, mid);
+	seq_matmul(mid, right);
 
-		spawn(new(child()) SortTask(m_left, mid));
-		spawn(new(child()) SortTask(mid, m_right));
-
-		wait();
-
-		for (size_t i = m_left; i < m_right; i++) {
-			if ((l < mid && r < m_right && data[l] < data[r]) || r == m_right) {
-				data_tmp[i] = data[l];
-				l++;
-			} else if ((l < mid && r < m_right) || l == mid) {
-				data_tmp[i] = data[r];
-				r++;
-			}
+	for (size_t i = left; i < right; i++) {
+		if ((l < mid && r < right && data[l] < data[r]) || r == right) {
+			data_tmp[i] = data[l];
+			l++;
+		} else if ((l < mid && r < right) || l == mid) {
+			data_tmp[i] = data[r];
+			r++;
 		}
-
-		memcpy(data + m_left, data_tmp + m_left, (m_right - m_left) * sizeof(elem_t));
 	}
 
-private:
-	size_t m_left;
-	size_t m_right;
-};
+	memcpy(data + left, data_tmp + left, (right - left) * sizeof(elem_t));
+}
 
 int main(int argc, char *argv[])
 {
 	size_t n = 8e7;
-	size_t nthreads = 0;
 
-	if (argc >= 2)
-		nthreads = atoi(argv[1]);
 	if (argc >= 3)
 		n = atoi(argv[2]);
-	if (nthreads == 0)
-		nthreads = thread::hardware_concurrency();
 
 	generate_data(n);
 
 	auto start = system_clock::now();
 
-	{
-		scheduler<SortTask> sh(2, nthreads);
-		sh.spawn(new(sh.root()) SortTask(0, n));
-		sh.wait();
-	}
+	seq_matmul(0, n);
 
 	auto stop = system_clock::now();
 
-	cout << "Scheduler:  staccato\n";
+	cout << "Scheduler:  sequential\n";
 	cout << "Benchmark:  mergesort\n";
-	cout << "Threads:    " << nthreads << "\n";
+	cout << "Threads:    " << 0 << "\n";
 	cout << "Time(us):   " << duration_cast<microseconds>(stop - start).count() << "\n";
 	cout << "Input:      " << n << "\n";
 	cout << "Output:     " << check() << "\n";

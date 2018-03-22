@@ -1,19 +1,18 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <cstring>
 
 #include <omp.h>
 
 using namespace std;
 using namespace chrono;
 
-struct elem_t {
-	int x;
-	int t;
-};
+typedef int elem_t;
 
 size_t lenght = 0;
 elem_t *data = nullptr;
+elem_t *data_tmp = nullptr;
 long sum_before = 0;
 
 inline uint32_t xorshift_rand() {
@@ -27,18 +26,19 @@ inline uint32_t xorshift_rand() {
 void generate_data(size_t n) {
 	lenght = n;
 	data = new elem_t[n];
+	data_tmp = new elem_t[n];
 	sum_before = 0;
 	for (size_t i = 0; i < n; ++i) {
-		data[i].x = xorshift_rand() % (n / 2);
-		sum_before += data[i].x;
+		data[i] = xorshift_rand() % (n / 2);
+		sum_before += data[i];
 	}
 }
 
 bool check() {
-	long s = data[0].x;
+	long s = data[0];
 	for (size_t i = 1; i < lenght; ++i) {
-		s += data[i].x;
-		if (data[i].x > data[i].x)
+		s += data[i];
+		if (data[i] > data[i])
 			return false;
 	}
 
@@ -61,18 +61,17 @@ void mergesort(size_t left, size_t right) {
 #pragma omp taskwait
 
 	for (size_t i = left; i < right; i++) {
-		if ((l < mid && r < right && data[l].x < data[r].x) || r == right) {
-			data[i].t = data[l].x;
+		if ((l < mid && r < right && data[l] < data[r]) || r == right) {
+			data_tmp[i] = data[l];
 			l++;
 		} else if ((l < mid && r < right) || l == mid) {
-			data[i].t = data[r].x;
+			data_tmp[i] = data[r];
 			r++;
 		}
 	}
 
 	// TODO: prefetch?
-	for (size_t i = left; i < right; ++i)
-		data[i].x = data[i].t;
+	memcpy(data + left, data_tmp + left, (right - left) * sizeof(elem_t));
 
 }
 void test(size_t left, size_t right)

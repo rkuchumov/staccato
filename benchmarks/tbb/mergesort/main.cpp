@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <cstring>
 
 #include <tbb/task.h>
 #include <tbb/task_scheduler_init.h>
@@ -9,13 +10,11 @@ using namespace std;
 using namespace chrono;
 using namespace tbb;
 
-struct elem_t {
-	int x;
-	int t;
-};
+typedef int elem_t;
 
 size_t lenght = 0;
 elem_t *data = nullptr;
+elem_t *data_tmp = nullptr;
 long sum_before = 0;
 
 inline uint32_t xorshift_rand() {
@@ -29,18 +28,19 @@ inline uint32_t xorshift_rand() {
 void generate_data(size_t n) {
 	lenght = n;
 	data = new elem_t[n];
+	data_tmp = new elem_t[n];
 	sum_before = 0;
 	for (size_t i = 0; i < n; ++i) {
-		data[i].x = xorshift_rand() % (n / 2);
-		sum_before += data[i].x;
+		data[i] = xorshift_rand() % (n / 2);
+		sum_before += data[i];
 	}
 }
 
 bool check() {
-	long s = data[0].x;
+	long s = data[0];
 	for (size_t i = 1; i < lenght; ++i) {
-		s += data[i].x;
-		if (data[i].x > data[i].x)
+		s += data[i];
+		if (data[i] > data[i])
 			return false;
 	}
 
@@ -74,18 +74,16 @@ public:
 		wait_for_all();
 
 		for (size_t i = m_left; i < m_right; i++) {
-			if ((l < mid && r < m_right && data[l].x < data[r].x) || r == m_right) {
-				data[i].t = data[l].x;
+			if ((l < mid && r < m_right && data[l] < data[r]) || r == m_right) {
+				data_tmp[i] = data[l];
 				l++;
 			} else if ((l < mid && r < m_right) || l == mid) {
-				data[i].t = data[r].x;
+				data_tmp[i] = data[r];
 				r++;
 			}
 		}
 
-		// TODO: prefetch?
-		for (size_t i = m_left; i < m_right; ++i)
-			data[i].x = data[i].t;
+		memcpy(data + m_left, data_tmp + m_left, (m_right - m_left) * sizeof(elem_t));
 
 		return nullptr;
 	}
