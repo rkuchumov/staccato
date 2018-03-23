@@ -54,7 +54,21 @@ public:
 	, m_right(right)
 	{ }
 
+	static const size_t cutoff = 8192;
+
+	static int qsort_cmp(const void* a, const void* b)
+	{
+		elem_t arg1 = *(const elem_t*)a;
+		elem_t arg2 = *(const elem_t*)b;
+		return (arg1 > arg2) - (arg1 < arg2);
+	}
+
 	void execute() {
+		if (m_right - m_left <= cutoff) {
+			qsort(data + m_left, m_right - m_left, sizeof(elem_t), qsort_cmp);
+			return;
+		}
+
 		if (m_right - m_left <= 1)
 			return;
 

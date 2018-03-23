@@ -46,7 +46,21 @@ bool check() {
 	return sum_before == s;
 }
 
+const size_t cutoff = 8192;
+
+int qsort_cmp(const void* a, const void* b)
+{
+	elem_t arg1 = *(const elem_t*)a;
+	elem_t arg2 = *(const elem_t*)b;
+	return (arg1 > arg2) - (arg1 < arg2);
+}
+
 void mergesort(size_t left, size_t right) {
+	if (right - left <= cutoff) {
+		qsort(data + left, right - left, sizeof(elem_t), qsort_cmp);
+		return;
+	}
+
 	if (right - left <= 1)
 		return;
 
