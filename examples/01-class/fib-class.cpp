@@ -1,14 +1,9 @@
 #include <iostream>
-#include <atomic>
-
-#include <task.hpp>
-#include <scheduler.hpp>
-
 #include <thread>
-#include <chrono>
+
+#include <staccato/scheduler.hpp>
 
 using namespace std;
-using namespace std::chrono;
 using namespace staccato;
 
 class FibTask: public task<FibTask>
@@ -55,7 +50,7 @@ int main(int argc, char *argv[])
 		nthreads = thread::hardware_concurrency();
 
 	{
-		scheduler<FibTask> sh(nthreads, 2, n);
+		scheduler<FibTask> sh(2, nthreads);
 		sh.spawn(new(sh.root()) FibTask(n, &answer));
 		sh.wait();
 	}
