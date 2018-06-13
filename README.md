@@ -39,35 +39,23 @@ For benchmarking I've used a server with two Intel Xeon E5 v4. Each processor ha
 The comparison with Intel TBB (v.4.3), Intel Cilk Plus (7.3) and sequential version show the following results:
 
 <p align="center">
-<img
-src="https://github.com/rkuchumov/staccato/blob/master/docs/llc-misses.png?raw=true"
-alt="llc_misses"
-style="max-width:60%" 
->
+<img src="https://github.com/rkuchumov/staccato/blob/master/docs/llc-misses.png?raw=true" alt="llc_misses" width="65%">
+</p>
 
-<img
-src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-fib.png?raw=true"
-alt="fib_benchmark"
-style="max-width:60%" 
->
+<p align="center">
+<img src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-fib.png?raw=true" alt="fib_benchmark" width="65%">
+</p>
 
-<img
-src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-dfs.png?raw=true"
-alt="dfs_benchmark"
-style="max-width:60%" 
->
+<p align="center">
+<img src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-dfs.png?raw=true" alt="dfs_benchmark" width="65%">
+</p>
 
-<img
-src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-matmul.png?raw=true"
-alt="matmul_benchmark"
-style="max-width:60%" 
->
+<p align="center">
+<img src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-matmul.png?raw=true" alt="matmul_benchmark" width="65%" >
+</p>
 
-<img
-src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-blkmul.png?raw=true"
-alt="blkmul_benchmark"
-style="max-width:60%" 
->
+<p align="center">
+<img src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-blkmul.png?raw=true" alt="blkmul_benchmark" width="65%" >
 </p>
 
 As this implementation attempts to reduce the overhead of internal data structures, the difference is most noticeable in CPU-bound tasks while memory-bound tasks left almost unaffected. 
