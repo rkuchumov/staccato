@@ -24,6 +24,7 @@ As a drawback of this approach is that you have to specify the maximum number of
 ## How does it compare to other schedulers?
 
 For bench-marking I've used the following tests:
+
 |Name|Dimensions|Type|Description|
 |--|--|--|--|
 |fib| 42| CPU-bound | Fibonacci number calculation recurrence formula |
@@ -37,15 +38,38 @@ For benchmarking I've used a server with two Intel Xeon E5 v4. Each processor ha
 
 The comparison with Intel TBB (v.4.3), Intel Cilk Plus (7.3) and sequential version show the following results:
 
-![LLC_Misses](https://github.com/rkuchumov/staccato/blob/master/docs/llc-misses.png?raw=true)
+<p align="center">
+<img
+src="https://github.com/rkuchumov/staccato/blob/master/docs/llc-misses.png?raw=true"
+alt="llc_misses"
+style="max-width:60%" 
+>
 
-![fib_benchmark](https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-fib.png?raw=true)
+<img
+src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-fib.png?raw=true"
+alt="fib_benchmark"
+style="max-width:60%" 
+>
 
-![dfs_benchmark](https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-dfs.png?raw=true)
+<img
+src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-dfs.png?raw=true"
+alt="dfs_benchmark"
+style="max-width:60%" 
+>
 
-![matmul_benchmark](https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-matmul.png?raw=true)
+<img
+src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-matmul.png?raw=true"
+alt="matmul_benchmark"
+style="max-width:60%" 
+>
 
-![blkmul](https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-blkmul.png?raw=true)
+<img
+src="https://github.com/rkuchumov/staccato/blob/master/docs/final.dat-blkmul.png?raw=true"
+alt="blkmul_benchmark"
+style="max-width:60%" 
+>
+</p>
+
 As this implementation attempts to reduce the overhead of internal data structures, the difference is most noticeable in CPU-bound tasks while memory-bound tasks left almost unaffected. 
 
 ## Usage
