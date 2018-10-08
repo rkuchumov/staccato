@@ -27,6 +27,6 @@
 *.out
 *.app
 
-*build*
+build*
 .ycm_extra_conf*
 *.vim

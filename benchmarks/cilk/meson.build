@@ -1,0 +1,19 @@
+benchs = [
+	['fib', ['fib.cpp']],
+	['dfs', ['dfs.cpp']],
+	['blkmul', ['blkmul.cpp']],
+	['matmul', ['matmul.cpp']],
+]
+
+cilkflags = ['-fcilkplus', '-lcilkrts']
+
+foreach t : benchs
+	exe = executable(
+		t[0],
+		t[1],
+		dependencies : deps,
+		cpp_args : cxxflags + cilkflags
+	)
+
+	test(t[0], exe)
+endforeach
