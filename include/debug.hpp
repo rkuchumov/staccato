@@ -68,7 +68,7 @@ public:
 	~Debug() { }
 
 	template <typename T>
-	Debug & operator<<(const T &) { }
+	Debug & operator<<(const T &) { return *this;}
 };
 
 #endif

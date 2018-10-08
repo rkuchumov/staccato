@@ -9,8 +9,8 @@
 #include <cmath>
 #include <cstring>
 
-#include <staccato/task.hpp>
-#include <staccato/scheduler.hpp>
+#include <task.hpp>
+#include <scheduler.hpp>
 
 using namespace std;
 using namespace chrono;
