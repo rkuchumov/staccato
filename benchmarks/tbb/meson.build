@@ -1,5 +1,6 @@
 benchs = [
 	['fib', ['fib.cpp']],
+	['nfib', ['nfib.cpp']],
 	['dfs', ['dfs.cpp']],
 	['blkmul', ['blkmul.cpp']],
 	['matmul', ['matmul.cpp']],
