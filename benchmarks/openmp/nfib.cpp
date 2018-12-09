@@ -19,7 +19,7 @@ void fib(int n, unsigned long *sum)
 	unsigned long *ans = new unsigned long[N];
 
 	for (int i = 0; i < N; ++i) {
-#pragma omp task shared(n, x)
+#pragma omp task shared(n, i, ans)
 		fib(n - i - 1, ans + i);
 	}
 
