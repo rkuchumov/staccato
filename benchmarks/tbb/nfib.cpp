@@ -30,7 +30,7 @@ public:
 		for (int i = 0; i < N; ++i)
 		{
 			NFibTask &b = *new(allocate_child()) NFibTask(n - i - 1, ans + i);
-			spawn(b)
+			spawn(b);
 		}
 
 		wait_for_all();
