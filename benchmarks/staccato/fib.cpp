@@ -62,8 +62,11 @@ int main(int argc, char *argv[])
 
 	auto stop = system_clock::now();
 
+	const char* env_aff = std::getenv("STACCATO_AFFINITY");
+
 	cout << "Scheduler:  staccato\n";
 	cout << "Benchmark:  fib\n";
+	cout << "Affinity:   " << (env_aff ? env_aff : "none") << "\n";
 	cout << "Threads:    " << nthreads << "\n";
 	cout << "Time(us):   " << duration_cast<microseconds>(stop - start).count() << "\n";
 	cout << "Input:      " << n << "\n";
