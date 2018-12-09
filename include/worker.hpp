@@ -5,6 +5,8 @@
 #include <thread>
 #include <limits>
 
+#include <pthread.h>
+
 #include "utils.hpp"
 
 #include "task_deque.hpp"
@@ -23,6 +25,7 @@ class worker
 public:
 	worker(
 		size_t id,
+		int core_id,
 		lifo_allocator *alloc,
 		size_t nvictims,
 		size_t taskgraph_degree,
@@ -77,6 +80,7 @@ private:
 template <typename T>
 worker<T>::worker(
 	size_t id,
+	int core_id,
 	lifo_allocator *alloc,
 	size_t nvictims,
 	size_t taskgraph_degree,
@@ -106,6 +110,15 @@ worker<T>::worker(
 
 		d->set_next(n);
 		d = n;
+	}
+
+	if (core_id >= 0) {
+		cpu_set_t cpuset;
+		CPU_ZERO(&cpuset);
+		CPU_SET(core_id, &cpuset);
+
+		pthread_t current_thread = pthread_self();    
+		pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
 	}
 }
 

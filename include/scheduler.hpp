@@ -48,6 +48,8 @@ private:
 
     inline size_t predict_page_size() const;
 
+	int get_worker_core(size_t id);
+
 	void create_workers();
 	void create_worker(size_t id);
 
@@ -119,13 +121,86 @@ void scheduler<T>::create_worker(size_t id)
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
+	int core_id = get_worker_core(id);
+
 	auto wkr = alloc->alloc<worker<T>>();
 	new(wkr)
-		worker<T>(id, alloc, m_nworkers, m_taskgraph_degree, m_taskgraph_height);
+		worker<T>(id, core_id, alloc, m_nworkers, m_taskgraph_degree, m_taskgraph_height);
 
 	m_workers[id].alloc = alloc;
 	m_workers[id].wkr = wkr;
 	m_workers[id].ready = true;
+}
+
+/* TODO: use enums <09-12-18, yourname> */
+int read_affinity() {
+	const char* env = std::getenv("STACCATO_AFFINITY");
+
+	if (!env)
+		return 0;
+
+	if (std::strcmp(env, "scatter") == 0)
+		return 1;
+
+	if (std::strcmp(env, "compact") == 0)
+		return 2;
+
+	return 0;
+}
+
+int read_env_to_int(const char *name) {
+	const char* env = std::getenv(name);
+
+	if (!env)
+		return 0;
+
+	return std::atoi(env);
+}
+
+template <typename T>
+int scheduler<T>::get_worker_core(size_t id)
+{
+	using namespace internal;
+
+	static int affinity = -1;
+	static int nsockets = -1;
+	static int nthreads = -1;
+	static int ncores = -1;
+
+	if (affinity < 0) {
+		affinity = read_affinity();
+		Debug() << "affinity: " << affinity;
+	}
+	if (nsockets < 0) {
+		nsockets = read_env_to_int("STACCATO_NSOCKETS");
+		Debug() << "nsockets: " << nsockets;
+	}
+	if (nthreads < 0) {
+		nthreads = read_env_to_int("STACCATO_NTHREADS");
+		Debug() << "nthreads: " << nthreads;
+	}
+	if (ncores < 0) {
+		ncores = read_env_to_int("STACCATO_NCORES");
+		Debug() << "ncores: " << ncores;
+	}
+
+	if (!affinity || !nthreads || !ncores || !nsockets)
+		return -1;
+
+	int core = -1;
+
+	if (affinity == 1) {
+		core = id; 
+	}
+
+	if (affinity == 2) {
+		core = ncores * nsockets * (id % nthreads) + id / nthreads; 
+	}
+
+	if (core >= 0)
+		Debug() << "Worker #" << id << " at core " << core;
+
+	return core;
 }
 
 template <typename T>

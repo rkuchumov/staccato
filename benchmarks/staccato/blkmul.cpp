@@ -51,7 +51,7 @@ private:
 
 Block::Block()
 {
-	memset(m_data, 0, size);
+	memset(m_data, 0, size * sizeof(elem_t));
 }
 
 void Block::fill()

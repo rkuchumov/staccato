@@ -12,6 +12,7 @@ foreach t : benchs
 		t[1],
 		include_directories : incdir,
 		dependencies : deps,
+		cpp_args : cxxflags
 	)
 
 	test(t[0], exe)

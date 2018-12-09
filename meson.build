@@ -21,6 +21,10 @@ cxxflags = [
 	'-D_GNU_SOURCE=1'
 ]
 
+if get_option('buildtype').startswith('debug')
+	cxxflags += '-DSTACCATO_DEBUG=1'
+endif
+
 test_flags = [
 	'-g',
 	'-march=native',
@@ -40,6 +44,3 @@ subdir('benchmarks/sequential')
 #subdir('benchmarks/cilk')
 #subdir('benchmarks/tbb')
 
-# if get_option('buildtype').startswith('debug')
-# 	subdir('tests')
-# endif
