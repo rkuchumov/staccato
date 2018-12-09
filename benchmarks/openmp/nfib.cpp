@@ -1,55 +1,57 @@
 #include <iostream>
-#include <vector>
 #include <chrono>
 #include <thread>
 
 #include <omp.h>
 
 using namespace std;
-using namespace chrono;
+using namespace std::chrono;
 
-void dfs(size_t depth, size_t breadth, unsigned long *sum) {
-	if (depth == 0) {
+int N;
+
+void fib(int n, unsigned long *sum)
+{
+	if (n <= N) {
 		*sum = 1;
 		return;
 	}
 
-	vector<unsigned long> sums(breadth);
+	unsigned long *ans = new unsigned long[N];
 
-	for (size_t i = 0; i < breadth; ++i)
-	{
-		auto s = &sums[i];
-#pragma omp task shared(depth, breadth, s)
-		dfs(depth - 1, breadth, s);
+	for (int i = 0; i < N; ++i) {
+#pragma omp task shared(n, x)
+		fib(n - i - 1, ans + i);
 	}
 
 #pragma omp taskwait
 
 	*sum = 0;
-	for (size_t i = 0; i < breadth; ++i)
-		*sum += sums[i];
+
+	for (int i = 0; i < N; ++i)
+		*sum += ans[i];
+
+	delete[] ans;
 }
 
-void test(size_t depth, size_t breadth, unsigned long *sum)
+void test(int n, unsigned long *sum)
 {
-#pragma omp task shared(depth, breadth, sum)
-	dfs(depth, breadth, sum);
+#pragma omp task shared(n, sum)
+		fib(n, sum);
 #pragma omp taskwait
 }
 
 int main(int argc, char *argv[])
 {
-	size_t depth = 8;
-	size_t breadth = 8;
+	size_t n = 40;
 	unsigned long answer;
 	size_t nthreads = 0;
 
 	if (argc >= 2)
 		nthreads = atoi(argv[1]);
 	if (argc >= 3)
-		depth = atoi(argv[2]);
+		N = atoi(argv[2]);
 	if (argc >= 4)
-		breadth = atoi(argv[3]);
+		n = atoi(argv[3]);
 	if (nthreads == 0)
 		nthreads = thread::hardware_concurrency();
 
@@ -58,17 +60,20 @@ int main(int argc, char *argv[])
 	omp_set_dynamic(0);
 	omp_set_num_threads(nthreads);
 
-#pragma omp parallel shared(depth, breadth, answer)
+#pragma omp parallel shared(n, answer)
 #pragma omp single
-	test(depth, breadth, &answer);
+	test(n, &answer);
 
 	auto stop = system_clock::now();
 
+	const char* env_aff = std::getenv("KMP_AFFINITY");
+
 	cout << "Scheduler:  omp\n";
-	cout << "Benchmark:  dfs\n";
+	cout << "Benchmark:  fib\n";
+	cout << "Affinity:   " << (env_aff ? env_aff : "none") << "\n";
 	cout << "Threads:    " << nthreads << "\n";
 	cout << "Time(us):   " << duration_cast<microseconds>(stop - start).count() << "\n";
-	cout << "Input:      " << depth << " " << breadth << "\n";
+	cout << "Input:      " << n << "\n";
 	cout << "Output:     " << answer << "\n";
 
 	return 0;

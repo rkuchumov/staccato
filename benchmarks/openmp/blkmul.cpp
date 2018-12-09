@@ -338,8 +338,11 @@ int main(int argc, char *argv[])
 
 	auto stop = system_clock::now();
 
+	const char* env_aff = std::getenv("KMP_AFFINITY");
+
 	cout << "Scheduler:  openmp\n";
 	cout << "Benchmark:  blkmul\n";
+	cout << "Affinity:   " << (env_aff ? env_aff : "none") << "\n";
 	cout << "Threads:    " << nthreads << "\n";
 	cout << "Time(us):   " << duration_cast<microseconds>(stop - start).count() << "\n";
 	cout << "Input:      " << log_n << "\n";
