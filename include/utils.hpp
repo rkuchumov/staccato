@@ -85,6 +85,9 @@
 #define dec_relaxed_p(var) (var)->fetch_sub(1, std::memory_order_relaxed)
 #define inc_relaxed_p(var) (var)->fetch_add(1, std::memory_order_relaxed)
 
+#define add_relaxed(var, n) (var).fetch_add((n), std::memory_order_relaxed)
+#define sub_relaxed(var, n) (var).fetch_sub((n), std::memory_order_relaxed)
+
 namespace staccato
 {
 namespace internal

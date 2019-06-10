@@ -26,7 +26,7 @@ class scheduler
 {
 public:
 
-	scheduler (
+	scheduler(
 		size_t taskgraph_degree,
 		size_t nworkers = 0,
 		size_t taskgraph_height = 1
@@ -71,10 +71,21 @@ scheduler<T>::scheduler(
 , m_taskgraph_height(taskgraph_height)
 , m_nworkers(nworkers)
 {
+	using namespace internal;
 	internal::Debug() << "Scheduler is working in debug mode";
 
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
+
+	worker<T>::m_power_of_width[0] = 1;
+	worker<T>::m_max_power_id = 0;
+	for (int i = 1; i < 64; ++i) {
+		worker<T>::m_power_of_width[i] = worker<T>::m_power_of_width[i-1] * taskgraph_degree;
+		if (worker<T>::m_power_of_width[i] > worker<T>::m_power_of_width[i-1])
+			continue;
+		worker<T>::m_max_power_id = i - 1;
+		break;
+	}
 
 	create_workers();
 }
@@ -249,7 +260,7 @@ T *scheduler<T>::root()
 }
 
 template <typename T>
-void scheduler<T>::spawn(T *)
+void scheduler<T>::spawn(T *root)
 {
 	m_master->root_commit();
 }

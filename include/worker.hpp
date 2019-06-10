@@ -46,18 +46,24 @@ public:
 	void root_commit();
 	void root_wait();
 
+	void count_task(unsigned level);
+	void uncount_task(unsigned level);
+
 #if STACCATO_DEBUG
 	void print_counters();
 #endif
+
+	static uint64_t m_power_of_width[64];
+	static unsigned m_max_power_id;
 
 private:
 	void init(size_t core_id, worker<T> *victim);
 
 	void grow_tail(task_deque<T> *tail);
 
-	task_deque<T> *get_victim();
+	worker<T> *get_victim();
 
-	task<T> *steal_task(task_deque<T> *tail, task_deque<T> **victim);
+	task<T> *steal_task(worker<T> **victim, task_deque<T> **vtail);
 
 	const size_t m_id;
 	const size_t m_taskgraph_degree;
@@ -72,10 +78,18 @@ private:
 
 	std::atomic_size_t m_nvictims;
 
-	task_deque<T> **m_victims_heads;
+	worker<T> **m_victims;
 
-	task_deque<T> *m_head_deque;
+	task_deque<T> *m_head;
+
+	std::atomic_ullong m_work_amount;
 };
+
+template <typename T>
+uint64_t worker<T>::m_power_of_width[64];
+
+template <typename T>
+unsigned worker<T>::m_max_power_id;
 
 template <typename T>
 worker<T>::worker(
@@ -92,16 +106,17 @@ worker<T>::worker(
 , m_allocator(alloc)
 , m_stopped(false)
 , m_nvictims(0)
-, m_victims_heads(nullptr)
-, m_head_deque(nullptr)
+, m_victims(nullptr)
+, m_head(nullptr)
+, m_work_amount(0)
 {
-	m_victims_heads = m_allocator->alloc_array<task_deque<T> *>(nvictims);
+	m_victims = m_allocator->alloc_array<worker<T> *>(nvictims);
 
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
 	new(d) task_deque<T>(m_taskgraph_degree, t);
 
-	m_head_deque = d;
+	m_head = d;
 
 	for (size_t i = 1; i < m_taskgraph_height + 1; ++i) {
 		auto n = m_allocator->alloc<task_deque<T>>();
@@ -131,7 +146,7 @@ worker<T>::~worker()
 template <typename T>
 void worker<T>::cache_victim(worker<T> *victim)
 {
-	m_victims_heads[m_nvictims] = victim->m_head_deque;
+	m_victims[m_nvictims] = victim;
 	m_nvictims++;
 }
 
@@ -144,19 +159,19 @@ void worker<T>::stop()
 template <typename T>
 T *worker<T>::root_allocate()
 {
-	return m_head_deque->put_allocate();
+	return m_head->put_allocate();
 }
 
 template <typename T>
 void worker<T>::root_commit()
 {
-	m_head_deque->put_commit();
+	m_head->put_commit();
 }
 
 template <typename T>
 void worker<T>::root_wait()
 {
-	local_loop(m_head_deque);
+	local_loop(m_head);
 }
 
 template <typename T>
@@ -183,10 +198,10 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 }
 
 template <typename T>
-task_deque<T> *worker<T>::get_victim()
+internal::worker<T> *worker<T>::get_victim()
 {
 	auto i = xorshift_rand() % m_nvictims;
-	return m_victims_heads[i];
+	return m_victims[i];
 }
 
 template <typename T>
@@ -195,8 +210,8 @@ void worker<T>::steal_loop()
 	while (m_nvictims == 0)
 		std::this_thread::yield();
 
-	auto vhead = get_victim();
-	auto vtail = vhead;
+	auto victim = get_victim();
+	auto vtail = victim->m_head;
 	size_t now_stolen = 0;
 
 	while (!load_relaxed(m_stopped)) {
@@ -220,10 +235,16 @@ void worker<T>::steal_loop()
 #endif
 
 		if (t) {
-			t->process(this, m_head_deque);
+			victim->uncount_task(t->level());
+			count_task(t->level());
+
+			t->process(this, m_head);
+			uncount_task(t->level());
+
 			vtail->return_stolen();
 
-			vtail = get_victim();
+			victim = get_victim();
+			vtail = victim->m_head;
 			now_stolen = 0;
 
 			continue;
@@ -234,10 +255,12 @@ void worker<T>::steal_loop()
 			continue;
 		}
 
-		if (vtail->get_next())
+		if (vtail->get_next()) {
 			vtail = vtail->get_next();
-		else
-			vtail = get_victim();
+		} else {
+			victim = get_victim();
+			vtail = victim->m_head;
+		}
 
 		now_stolen = 0;
 	}
@@ -247,7 +270,8 @@ template <typename T>
 void worker<T>::local_loop(task_deque<T> *tail)
 {
 	task<T> *t = nullptr;
-	task_deque<T> *victim = nullptr;
+	worker<T> *victim = nullptr;
+	task_deque<T> *vtail = nullptr;
 
 	while (true) { // Local tasks loop
 		if (t) {
@@ -255,9 +279,11 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 			t->process(this, tail->get_next());
 
-			if (victim) {
-				victim->return_stolen();
-				victim = nullptr;
+			uncount_task(t->level());
+
+			if (vtail) {
+				vtail->return_stolen();
+				vtail = nullptr;
 			}
 		}
 
@@ -280,33 +306,38 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (nstolen == 0)
 			return;
 
-		t = steal_task(tail, &victim);
+		t = steal_task(&victim, &vtail);
 
-		if (!t)
-			std::this_thread::yield();
+		if (t) {
+			victim->uncount_task(t->level());
+			count_task(t->level());
+			continue;
+		}
+
+		std::this_thread::yield();
 	}
 }
 
 template <typename T>
-task<T> *worker<T>::steal_task(task_deque<T> *, task_deque<T> **victim)
+task<T> *worker<T>::steal_task(worker<T> **victim, task_deque<T> **vtail)
 {
 	if (load_relaxed(m_nvictims) == 0)
 		return nullptr;
 
-	auto vhead = get_victim();
-	auto vtail = vhead;
+	auto vv = get_victim();
+	auto vt = vv->m_head;
 	size_t now_stolen = 0;
 
 	while (true) {
 		if (now_stolen >= m_taskgraph_degree - 1) {
-			if (vtail->get_next()) {
-				vtail = vtail->get_next();
+			if (vt->get_next()) {
+				vt = vt->get_next();
 				now_stolen = 0;
 			}
 		}
 
 		bool was_empty = false;
-		auto t = vtail->steal(&was_empty);
+		auto t = vt->steal(&was_empty);
 
 #if STACCATO_DEBUG
 		if (t)
@@ -318,7 +349,8 @@ task<T> *worker<T>::steal_task(task_deque<T> *, task_deque<T> **victim)
 #endif
 
 		if (t) {
-			*victim = vtail;
+			*victim = vv;
+			*vtail = vt;
 			return t;
 		}
 
@@ -327,13 +359,35 @@ task<T> *worker<T>::steal_task(task_deque<T> *, task_deque<T> **victim)
 			continue;
 		}
 
-		if (vtail->get_next())
-			vtail = vtail->get_next();
+		if (vt->get_next())
+			vt = vt->get_next();
 		else
 			return nullptr;
 
 		now_stolen = 0;
 	}
+}
+
+template <typename T>
+void worker<T>::count_task(unsigned level)
+{
+	if (level >= m_max_power_id)
+		level = 0;
+	else
+		level = m_max_power_id - level;
+
+	add_relaxed(m_work_amount, m_power_of_width[level]);
+}
+
+template <typename T>
+void worker<T>::uncount_task(unsigned level)
+{
+	if (level >= m_max_power_id)
+		level = 0;
+	else
+		level = m_max_power_id - level;
+
+	sub_relaxed(m_work_amount, m_power_of_width[level]);
 }
 
 #if STACCATO_DEBUG
