@@ -37,6 +37,12 @@ public:
 
 	internal::worker<T> *worker() const;
 
+	internal::task_deque<T> *tail() const;
+
+	void set_worker(internal::worker<T> * w);
+
+	void set_tail(internal::task_deque<T> *t);
+
 private:
 	internal::worker<T> *m_worker;
 
@@ -61,6 +67,24 @@ internal::worker<T> *task<T>::worker() const
 }
 
 template <typename T>
+internal::task_deque<T> *task<T>::tail() const
+{
+	return m_tail;
+}
+
+template <typename T>
+void task<T>::set_worker(internal::worker<T> * w)
+{
+	m_worker = w;
+}
+
+template <typename T>
+void task<T>::set_tail(internal::task_deque<T> *t)
+{
+	m_tail = t;
+}
+
+template <typename T>
 void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail)
 {
 	m_worker = worker;
@@ -80,6 +104,7 @@ void task<T>::spawn(T *child)
 {
 	child->m_level = m_level + 1;
 	child->m_worker = m_worker;
+	child->m_tail = m_tail;
 
 	m_worker->count_task(child->m_level);
 	m_tail->put_commit();

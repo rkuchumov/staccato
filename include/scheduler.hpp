@@ -268,7 +268,7 @@ T *scheduler<T>::root()
 template <typename T>
 void scheduler<T>::spawn(T *root)
 {
-	m_master->root_commit();
+	m_master->root_commit(root);
 }
 
 template <typename T>

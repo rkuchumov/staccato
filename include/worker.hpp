@@ -43,7 +43,7 @@ public:
 	void steal_loop();
 
 	T *root_allocate();
-	void root_commit();
+	void root_commit(T *root);
 	void root_wait();
 
 	void count_task(unsigned level);
@@ -63,7 +63,7 @@ private:
 
 	task_deque<T> *get_victim_head();
 
-	task<T> *steal_task(task_deque<T> **vtail);
+	task<T> *steal_task();
 
 	const size_t m_id;
 	const size_t m_taskgraph_degree;
@@ -163,8 +163,10 @@ T *worker<T>::root_allocate()
 }
 
 template <typename T>
-void worker<T>::root_commit()
+void worker<T>::root_commit(T *root)
 {
+	root->set_worker(this);
+	root->set_tail(m_head);
 	m_head->put_commit();
 }
 
@@ -264,18 +266,18 @@ template <typename T>
 void worker<T>::local_loop(task_deque<T> *tail)
 {
 	task<T> *t = nullptr;
-	task_deque<T> *vtail = nullptr;
+	task_deque<T> *victim = nullptr;
 
 	while (true) { // Local tasks loop
 		if (t) {
+			t->worker()->uncount_task(t->level());
+
 			grow_tail(tail);
 
 			t->process(this, tail->get_next());
 
-			if (vtail) {
-				vtail->return_stolen();
-				vtail = nullptr;
-			}
+			if (victim)
+				victim->return_stolen();
 		}
 
 		size_t nstolen = 0;
@@ -292,17 +294,17 @@ void worker<T>::local_loop(task_deque<T> *tail)
 #endif
 
 		if (t) {
-			uncount_task(t->level());
+			victim = nullptr;
 			continue;
 		}
 
 		if (nstolen == 0)
 			return;
 
-		t = steal_task(&vtail);
+		t = steal_task();
 
 		if (t) {
-			t->worker()->uncount_task(t->level());
+			victim = t->tail();
 			continue;
 		}
 
@@ -311,7 +313,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 }
 
 template <typename T>
-task<T> *worker<T>::steal_task(task_deque<T> **vtail)
+task<T> *worker<T>::steal_task()
 {
 	if (load_relaxed(m_nvictims) == 0)
 		return nullptr;
@@ -339,21 +341,18 @@ task<T> *worker<T>::steal_task(task_deque<T> **vtail)
 			COUNT(steal2_race);
 #endif
 
-		if (t) {
-			*vtail = vt;
+		if (t)
 			return t;
-		}
 
 		if (!was_empty) {
 			now_stolen++;
 			continue;
 		}
 
-		if (vt->get_next())
-			vt = vt->get_next();
-		else
+		if (!vt->get_next())
 			return nullptr;
 
+		vt = vt->get_next();
 		now_stolen = 0;
 	}
 }
