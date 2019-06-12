@@ -16,61 +16,51 @@ namespace staccato
 namespace internal
 {
 
-template <typename T>
+template <typename T, size_t N = 4>
 class task_mailbox
 {
 public:
-	task_mailbox(size_t size, T **mem);
+	task_mailbox();
 	~task_mailbox();
-
-	void return_stolen();
-
-	T *put_allocate();
-	void put_commit();
-
-	void put(T *task);
 
 	size_t size() const;
 
+	void put(T *task);
+
 	T *take();
-	T *steal(bool *was_empty);
 
 private:
-	const size_t m_mask;
-
-	T **m_array;
+	T *m_array[N];
 
 	std::atomic_size_t m_top;
 	std::atomic_size_t m_bottom;
 	// STACCATO_ALIGN std::atomic_size_t m_bottom;
 };
 
-template <typename T>
-task_mailbox<T>::task_mailbox(size_t size, T **mem)
-: m_mask(size - 1)
-, m_array(mem)
-, m_top(1)
+template <typename T, size_t N>
+task_mailbox<T, N>::task_mailbox()
+: m_top(1)
 , m_bottom(1)
 {
-	STACCATO_ASSERT(is_pow2(size), "Deque size is not power of 2");
+	STACCATO_ASSERT(is_pow2(N), "Deque size is not power of 2");
 }
 
-template <typename T>
-task_mailbox<T>::~task_mailbox()
+template <typename T, size_t N>
+task_mailbox<T, N>::~task_mailbox()
 { }
 
-template <typename T>
-void task_mailbox<T>::put(T *task)
+template <typename T, size_t N>
+void task_mailbox<T, N>::put(T *task)
 {
 	auto b = load_relaxed(m_bottom);
-	m_array[b & m_mask] = task;
+	m_array[b & (N - 1)] = task;
 
 	atomic_fence_release();
 	store_relaxed(m_bottom, b + 1);
 }
 
-template <typename T>
-T *task_mailbox<T>::take()
+template <typename T, size_t N>
+T *task_mailbox<T, N>::take()
 {
 	auto t = load_relaxed(m_top);
 	auto b = load_relaxed(m_bottom);
@@ -78,15 +68,15 @@ T *task_mailbox<T>::take()
 	if (t >= b)
 		return nullptr;
 
-	T *task = m_array[t & m_mask];
+	T *task = m_array[t & (N - 1)];
 
 	atomic_fence_release();
 	store_relaxed(m_top, t + 1);
 	return task;
 }
 
-template <typename T>
-size_t task_mailbox<T>::size() const
+template <typename T, size_t N>
+size_t task_mailbox<T, N>::size() const
 {
 	auto t = load_relaxed(m_top);
 	auto b = load_relaxed(m_bottom);
