@@ -44,3 +44,7 @@ subdir('benchmarks/sequential')
 #subdir('benchmarks/cilk')
 #subdir('benchmarks/tbb')
 
+if get_option('buildtype').startswith('debug')
+	subdir('tests/')
+endif
+
