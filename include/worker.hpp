@@ -236,10 +236,8 @@ void worker<T>::steal_loop()
 
 		if (t) {
 			victim->uncount_task(t->level());
-			count_task(t->level());
 
 			t->process(this, m_head);
-			uncount_task(t->level());
 
 			vtail->return_stolen();
 
@@ -279,8 +277,6 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 			t->process(this, tail->get_next());
 
-			uncount_task(t->level());
-
 			if (vtail) {
 				vtail->return_stolen();
 				vtail = nullptr;
@@ -300,8 +296,10 @@ void worker<T>::local_loop(task_deque<T> *tail)
 			COUNT(take_stolen);
 #endif
 
-		if (t)
+		if (t) {
+			uncount_task(t->level());
 			continue;
+		}
 
 		if (nstolen == 0)
 			return;
@@ -310,7 +308,6 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 		if (t) {
 			victim->uncount_task(t->level());
-			count_task(t->level());
 			continue;
 		}
 

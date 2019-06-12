@@ -30,3 +30,4 @@
 build*
 .ycm_extra_conf*
 *.vim
+.znfs.env
