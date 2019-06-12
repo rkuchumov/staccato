@@ -12,6 +12,7 @@
 #include "task_deque.hpp"
 #include "lifo_allocator.hpp"
 #include "task.hpp"
+#include "task_mailbox.hpp"
 #include "counter.hpp"
 
 namespace staccato
@@ -80,6 +81,8 @@ private:
 
 	task_deque<T> **m_victim_heads;
 
+	task_mailbox<T> *m_mailbox;
+
 	task_deque<T> *m_head;
 
 	std::atomic_ullong m_work_amount;
@@ -111,6 +114,9 @@ worker<T>::worker(
 , m_work_amount(0)
 {
 	m_victim_heads = m_allocator->alloc_array<task_deque<T> *>(nvictims);
+
+	m_mailbox = m_allocator->alloc<task_mailbox<T>>();
+	new(m_mailbox) task_mailbox<T>();
 
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
@@ -212,19 +218,40 @@ void worker<T>::steal_loop()
 	while (m_nvictims == 0)
 		std::this_thread::yield();
 
-	auto vtail = get_victim_head();
+	task<T> *t = nullptr;
+	task_deque<T> *victim = nullptr;
 	size_t now_stolen = 0;
 
 	while (!load_relaxed(m_stopped)) {
+		if (t) {
+			t->worker()->uncount_task(t->level());
+
+			t->process(this, m_head);
+
+			victim->return_stolen();
+
+			victim = nullptr;
+			now_stolen = 0;
+		}
+
+		t = m_mailbox->take();
+		if (t) {
+			victim = t->tail();
+			continue;
+		}
+
+		if (victim == nullptr)
+			victim = get_victim_head();
+
 		if (now_stolen >= m_taskgraph_degree - 1) {
-			if (vtail->get_next()) {
-				vtail = vtail->get_next();
+			if (victim->get_next()) {
+				victim = victim->get_next();
 				now_stolen = 0;
 			}
 		}
 
 		bool was_empty = false;
-		auto t = vtail->steal(&was_empty);
+		t = victim->steal(&was_empty);
 
 #if STACCATO_DEBUG
 		if (t)
@@ -235,28 +262,18 @@ void worker<T>::steal_loop()
 			COUNT(steal_race);
 #endif
 
-		if (t) {
-			t->worker()->uncount_task(t->level());
-
-			t->process(this, m_head);
-
-			vtail->return_stolen();
-
-			vtail = get_victim_head();
-			now_stolen = 0;
-
+		if (t)
 			continue;
-		}
 
 		if (!was_empty) {
 			now_stolen++;
 			continue;
 		}
 
-		if (vtail->get_next())
-			vtail = vtail->get_next();
+		if (victim->get_next())
+			victim = victim->get_next();
 		else
-			vtail = get_victim_head();
+			victim = get_victim_head();
 
 		now_stolen = 0;
 	}
@@ -295,6 +312,13 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 		if (t) {
 			victim = nullptr;
+			continue;
+		}
+
+		t = m_mailbox->take();
+
+		if (t) {
+			victim = t->tail();
 			continue;
 		}
 
