@@ -61,9 +61,9 @@ private:
 
 	void grow_tail(task_deque<T> *tail);
 
-	worker<T> *get_victim();
+	task_deque<T> *get_victim_head();
 
-	task<T> *steal_task(worker<T> **victim, task_deque<T> **vtail);
+	task<T> *steal_task(task_deque<T> **vtail);
 
 	const size_t m_id;
 	const size_t m_taskgraph_degree;
@@ -78,7 +78,7 @@ private:
 
 	std::atomic_size_t m_nvictims;
 
-	worker<T> **m_victims;
+	task_deque<T> **m_victim_heads;
 
 	task_deque<T> *m_head;
 
@@ -106,11 +106,11 @@ worker<T>::worker(
 , m_allocator(alloc)
 , m_stopped(false)
 , m_nvictims(0)
-, m_victims(nullptr)
+, m_victim_heads(nullptr)
 , m_head(nullptr)
 , m_work_amount(0)
 {
-	m_victims = m_allocator->alloc_array<worker<T> *>(nvictims);
+	m_victim_heads = m_allocator->alloc_array<task_deque<T> *>(nvictims);
 
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
@@ -146,7 +146,7 @@ worker<T>::~worker()
 template <typename T>
 void worker<T>::cache_victim(worker<T> *victim)
 {
-	m_victims[m_nvictims] = victim;
+	m_victim_heads[m_nvictims] = victim->m_head;
 	m_nvictims++;
 }
 
@@ -198,10 +198,10 @@ void worker<T>::grow_tail(task_deque<T> *tail)
 }
 
 template <typename T>
-internal::worker<T> *worker<T>::get_victim()
+internal::task_deque<T> *worker<T>::get_victim_head()
 {
 	auto i = xorshift_rand() % m_nvictims;
-	return m_victims[i];
+	return m_victim_heads[i];
 }
 
 template <typename T>
@@ -210,8 +210,7 @@ void worker<T>::steal_loop()
 	while (m_nvictims == 0)
 		std::this_thread::yield();
 
-	auto victim = get_victim();
-	auto vtail = victim->m_head;
+	auto vtail = get_victim_head();
 	size_t now_stolen = 0;
 
 	while (!load_relaxed(m_stopped)) {
@@ -235,14 +234,13 @@ void worker<T>::steal_loop()
 #endif
 
 		if (t) {
-			victim->uncount_task(t->level());
+			t->worker()->uncount_task(t->level());
 
 			t->process(this, m_head);
 
 			vtail->return_stolen();
 
-			victim = get_victim();
-			vtail = victim->m_head;
+			vtail = get_victim_head();
 			now_stolen = 0;
 
 			continue;
@@ -253,12 +251,10 @@ void worker<T>::steal_loop()
 			continue;
 		}
 
-		if (vtail->get_next()) {
+		if (vtail->get_next())
 			vtail = vtail->get_next();
-		} else {
-			victim = get_victim();
-			vtail = victim->m_head;
-		}
+		else
+			vtail = get_victim_head();
 
 		now_stolen = 0;
 	}
@@ -268,7 +264,6 @@ template <typename T>
 void worker<T>::local_loop(task_deque<T> *tail)
 {
 	task<T> *t = nullptr;
-	worker<T> *victim = nullptr;
 	task_deque<T> *vtail = nullptr;
 
 	while (true) { // Local tasks loop
@@ -304,10 +299,10 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (nstolen == 0)
 			return;
 
-		t = steal_task(&victim, &vtail);
+		t = steal_task(&vtail);
 
 		if (t) {
-			victim->uncount_task(t->level());
+			t->worker()->uncount_task(t->level());
 			continue;
 		}
 
@@ -316,13 +311,12 @@ void worker<T>::local_loop(task_deque<T> *tail)
 }
 
 template <typename T>
-task<T> *worker<T>::steal_task(worker<T> **victim, task_deque<T> **vtail)
+task<T> *worker<T>::steal_task(task_deque<T> **vtail)
 {
 	if (load_relaxed(m_nvictims) == 0)
 		return nullptr;
 
-	auto vv = get_victim();
-	auto vt = vv->m_head;
+	auto vt = get_victim_head();
 	size_t now_stolen = 0;
 
 	while (true) {
@@ -346,7 +340,6 @@ task<T> *worker<T>::steal_task(worker<T> **victim, task_deque<T> **vtail)
 #endif
 
 		if (t) {
-			*victim = vv;
 			*vtail = vt;
 			return t;
 		}

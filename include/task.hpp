@@ -35,6 +35,8 @@ public:
 
 	unsigned level() const;
 
+	internal::worker<T> *worker() const;
+
 private:
 	internal::worker<T> *m_worker;
 
@@ -51,6 +53,12 @@ task<T>::task()
 template <typename T>
 task<T>::~task()
 { }
+
+template <typename T>
+internal::worker<T> *task<T>::worker() const
+{
+	return m_worker;
+}
 
 template <typename T>
 void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail)
@@ -71,6 +79,8 @@ template <typename T>
 void task<T>::spawn(T *child)
 {
 	child->m_level = m_level + 1;
+	child->m_worker = m_worker;
+
 	m_worker->count_task(child->m_level);
 	m_tail->put_commit();
 }
