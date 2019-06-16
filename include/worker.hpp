@@ -47,8 +47,10 @@ public:
 	void root_commit(T *root);
 	void root_wait();
 
+	uint64_t get_load() const;
 	void count_task(unsigned level);
 	void uncount_task(unsigned level);
+	task_mailbox<T> *get_mailbox();
 
 #if STACCATO_DEBUG
 	void print_counters();
@@ -402,6 +404,19 @@ void worker<T>::uncount_task(unsigned level)
 
 	sub_relaxed(m_work_amount, m_power_of_width[level]);
 }
+
+template <typename T>
+uint64_t worker<T>::get_load() const
+{
+	return load_relaxed(m_work_amount);
+}
+
+template <typename T>
+task_mailbox<T> *worker<T>::get_mailbox()
+{
+	return m_mailbox;
+}
+
 
 #if STACCATO_DEBUG
 

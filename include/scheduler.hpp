@@ -314,6 +314,8 @@ scheduler<T>::~scheduler()
 	internal::counter::print_header();
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i].wkr->print_counters();
+	for (size_t i = 0; i < m_ndispatchers; ++i)
+		m_dispatchers[i].dsp->print_stats();
 #endif
 
 	for (size_t i = 1; i < m_nworkers; ++i)
