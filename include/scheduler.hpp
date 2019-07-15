@@ -92,20 +92,15 @@ scheduler<T>::scheduler(
 		m_nworkers = std::thread::hardware_concurrency();
 
 	worker<T>::m_power_of_width[0] = 1;
+	worker<T>::m_power_of_width[1] = taskgraph_degree;
 	worker<T>::m_max_power_id = 63;
-	for (int i = 1; i < 64; ++i) {
+	for (int i = 2; i < 64; ++i) {
 		worker<T>::m_power_of_width[i] = worker<T>::m_power_of_width[i-1] * taskgraph_degree;
 		if (worker<T>::m_power_of_width[i] > worker<T>::m_power_of_width[i-1])
 			continue;
-		worker<T>::m_max_power_id = i - 1;
+		worker<T>::m_max_power_id = i - 2;
 		break;
 	}
-
-	// for (int i = 0; i < 64; ++i) {
-	// 	internal::Debug() << i << ": " << worker<T>::m_power_of_width[i];
-	// }
-    //
-	// internal::Debug() << "max power id: " << worker<T>::m_max_power_id;
 
 	create_workers();
 

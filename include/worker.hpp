@@ -175,6 +175,7 @@ void worker<T>::root_commit(T *root)
 {
 	root->set_worker(this);
 	root->set_tail(m_head);
+	count_task(0);
 	m_head->put_commit();
 }
 
@@ -401,6 +402,8 @@ void worker<T>::uncount_task(unsigned level)
 		level = 0;
 	else
 		level = m_max_power_id - level;
+
+	STACCATO_ASSERT(m_power_of_width[level] <= m_work_amount, "inconsistent work_amount state");
 
 	sub_relaxed(m_work_amount, m_power_of_width[level]);
 }
