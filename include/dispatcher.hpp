@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <thread>
 #include <limits>
+#include <iostream>
 #include <chrono>
 
 #if STACCATO_DEBUG
@@ -33,7 +34,8 @@ public:
 		size_t id,
 		int core_id,
 		lifo_allocator *alloc,
-		size_t nworkers
+		size_t nworkers,
+		size_t taskgraph_degree
 	);
 
 	~dispatcher();
@@ -49,6 +51,7 @@ public:
 private:
 	struct worker_state {
 		worker<T> *w;
+		task_deque<T> *head;
 		task_mailbox<T> *mailbox;
 		uint64_t load;
 		size_t mailbox_size;
@@ -60,6 +63,12 @@ private:
 	size_t m_load_argmax;
 
 	void update();
+
+	void balance();
+
+	task<T> *steal_task(task_deque<T> *head);
+
+	bool try_move_task(size_t w_from, size_t w_to);
 
 #if STACCATO_DEBUG
 	std::vector<uint64_t> load_samples;
@@ -73,6 +82,8 @@ private:
 	std::atomic_size_t m_nworkers;
 
 	worker_state *m_workers;
+
+	const size_t m_taskgraph_degree;
 };
 
 template <typename T>
@@ -80,13 +91,15 @@ dispatcher<T>::dispatcher(
 	size_t id,
 	int core_id,
 	lifo_allocator *alloc,
-	size_t nworkers
+	size_t nworkers,
+	size_t taskgraph_degree
 )
 : m_id(id)
 , m_allocator(alloc)
 , m_stopped(false)
 , m_nworkers(0)
 , m_workers(nullptr)
+, m_taskgraph_degree(taskgraph_degree)
 {
 	m_workers = m_allocator->alloc_array<worker_state>(nworkers);
 
@@ -110,6 +123,7 @@ template <typename T>
 void dispatcher<T>::register_worker(worker<T> *w)
 {
 	m_workers[m_nworkers].w = w;
+	m_workers[m_nworkers].head = w->get_deque();
 	m_workers[m_nworkers].mailbox = w->get_mailbox();;
 	m_workers[m_nworkers].load = 0;
 	m_workers[m_nworkers].mailbox_size = 0;
@@ -158,6 +172,17 @@ void dispatcher<T>::update()
 #endif
 	}
 
+	if (m_load_argmin != m_load_argmax) {
+		bool ok = try_move_task(m_load_argmax, m_load_argmin);
+		if (ok) {
+			std::clog << "moved ";
+			std::clog << m_load_argmax << ":" << m_load_max << " -> ";
+			std::clog << m_load_argmin << ":" << m_load_min << "\n";
+		} else {
+			std::clog << "move failed\n";
+		}
+	}
+
 	using namespace std::chrono_literals;
 	std::this_thread::sleep_for(100ms);
 }
@@ -170,6 +195,52 @@ void dispatcher<T>::loop()
 
 		std::this_thread::yield();
 	}
+}
+
+template <typename T>
+task<T> *dispatcher<T>::steal_task(task_deque<T> *head)
+{
+	task_deque<T> *tail = head;
+	size_t now_stolen = 0;
+
+	while (true) {
+		if (now_stolen >= m_taskgraph_degree - 1) {
+			if (tail->get_next()) {
+				tail = tail->get_next();
+				now_stolen = 0;
+			}
+		}
+
+		bool was_empty = false;
+		auto t = tail->steal(&was_empty);
+
+		if (t)
+			return t;
+
+		if (!was_empty) {
+			now_stolen++;
+			continue;
+		}
+
+		if (!tail->get_next())
+			return nullptr;
+
+		tail = tail->get_next();
+		now_stolen = 0;
+	}
+}
+
+template <typename T>
+bool dispatcher<T>::try_move_task(size_t w_from, size_t w_to)
+{
+	task<T> *t = steal_task(m_workers[w_from].head);
+	if (!t)
+		return false;
+
+
+	m_workers[w_to].mailbox->put(reinterpret_cast<T *>(t));
+
+	return true;
 }
 
 #if STACCATO_DEBUG

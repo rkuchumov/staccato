@@ -56,6 +56,8 @@ public:
 	void print_counters();
 #endif
 
+	task_deque<T> *get_deque();
+
 	static uint64_t m_power_of_width[64];
 	static unsigned m_max_power_id;
 
@@ -420,6 +422,11 @@ task_mailbox<T> *worker<T>::get_mailbox()
 	return m_mailbox;
 }
 
+template <typename T>
+task_deque<T> *worker<T>::get_deque()
+{
+	return m_head;
+}
 
 #if STACCATO_DEBUG
 

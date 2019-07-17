@@ -193,7 +193,7 @@ void scheduler<T>::create_dispatcher(size_t id)
 	int core_id = 0;
 
 	auto dsp = alloc->alloc<dispatcher<T>>();
-	new (dsp) dispatcher<T>(id, core_id, alloc, m_nworkers);
+	new (dsp) dispatcher<T>(id, core_id, alloc, m_nworkers, m_taskgraph_degree);
 
 	m_dispatchers[id].alloc = alloc;
 	m_dispatchers[id].dsp = dsp;
