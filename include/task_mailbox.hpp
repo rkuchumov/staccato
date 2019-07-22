@@ -29,6 +29,8 @@ public:
 
 	T *take();
 
+	size_t capacity() const;
+
 private:
 	T *m_array[N];
 
@@ -85,6 +87,12 @@ size_t task_mailbox<T, N>::size() const
 		return 0;
 
 	return b - t;
+}
+
+template <typename T, size_t N>
+size_t task_mailbox<T, N>::capacity() const
+{
+	return N;
 }
  
 } // namespace internal

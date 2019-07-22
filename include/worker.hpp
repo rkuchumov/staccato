@@ -53,7 +53,7 @@ public:
 	task_mailbox<T> *get_mailbox();
 
 #if STACCATO_DEBUG
-	void print_counters();
+	const counter &get_counter() const;
 #endif
 
 	task_deque<T> *get_deque();
@@ -229,8 +229,6 @@ void worker<T>::steal_loop()
 
 	while (!load_relaxed(m_stopped)) {
 		if (t) {
-			t->worker()->uncount_task(t->level());
-
 			t->process(this, m_head);
 
 			victim->return_stolen();
@@ -241,6 +239,7 @@ void worker<T>::steal_loop()
 
 		t = m_mailbox->take();
 		if (t) {
+			uncount_task(t->level());
 			victim = t->tail();
 			continue;
 		}
@@ -267,8 +266,10 @@ void worker<T>::steal_loop()
 			COUNT(steal_race);
 #endif
 
-		if (t)
+		if (t) {
+			t->worker()->uncount_task(t->level());
 			continue;
+		}
 
 		if (!was_empty) {
 			now_stolen++;
@@ -292,8 +293,6 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 	while (true) { // Local tasks loop
 		if (t) {
-			t->worker()->uncount_task(t->level());
-
 			grow_tail(tail);
 
 			t->process(this, tail->get_next());
@@ -316,6 +315,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 #endif
 
 		if (t) {
+			uncount_task(t->level());
 			victim = nullptr;
 			continue;
 		}
@@ -323,6 +323,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		t = m_mailbox->take();
 
 		if (t) {
+			uncount_task(t->level());
 			victim = t->tail();
 			continue;
 		}
@@ -333,6 +334,7 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		t = steal_task();
 
 		if (t) {
+			t->worker()->uncount_task(t->level());
 			victim = t->tail();
 			continue;
 		}
@@ -431,11 +433,12 @@ task_deque<T> *worker<T>::get_deque()
 #if STACCATO_DEBUG
 
 template <typename T>
-void worker<T>::print_counters()
+const counter &worker<T>::get_counter() const
 {
-	m_counter.print(m_id);
+	return m_counter;
 } 
 #endif
+
 
 }
 }

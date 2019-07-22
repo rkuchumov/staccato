@@ -57,14 +57,14 @@ private:
 		size_t mailbox_size;
 	};
 
-	uint64_t m_load_min;
-	uint64_t m_load_max;
-	size_t m_load_argmin;
-	size_t m_load_argmax;
+	void print_load(uint64_t l);
+	size_t max_power(uint64_t l);
 
 	void update();
 
-	void balance();
+	bool balance();
+
+	uint64_t top_task_load(uint64_t load) ;
 
 	task<T> *steal_task(task_deque<T> *head);
 
@@ -84,6 +84,20 @@ private:
 	worker_state *m_workers;
 
 	const size_t m_taskgraph_degree;
+
+	enum even_e {
+		ITERATION = 0,
+		MIGRATION_NO_MIN,
+		MIGRATION_NO_MAX,
+		MIGRATION_FAIL_EMPTY,
+		MIGRATION_FAIL_RACE,
+		MIGRATION_SUCCESS,
+		MIGRATION_LOW_IMB,
+
+		NR_EVENTS
+	};
+
+	size_t m_events[NR_EVENTS];
 };
 
 template <typename T>
@@ -101,6 +115,8 @@ dispatcher<T>::dispatcher(
 , m_workers(nullptr)
 , m_taskgraph_degree(taskgraph_degree)
 {
+	memset(m_events, 0, sizeof(m_events));
+
 	m_workers = m_allocator->alloc_array<worker_state>(nworkers);
 
 	if (core_id >= 0) {
@@ -143,10 +159,6 @@ void dispatcher<T>::update()
 	m_workers[0].load = l;
 	m_workers[0].mailbox_size = m_workers[0].mailbox->size();
 
-	m_load_min = l;
-	m_load_max = l;
-	m_load_argmin = 0;
-	m_load_argmax = 0;
 
 #if STACCATO_DEBUG
 	load_samples.push_back(l);
@@ -157,43 +169,128 @@ void dispatcher<T>::update()
 		m_workers[i].load = l;
 		m_workers[i].mailbox_size = m_workers[i].mailbox->size();
 
-		if (l > m_load_max) {
-			m_load_max = l;
-			m_load_argmax = i;
-		}
-
-		if (l < m_load_min) {
-			m_load_min = l;
-			m_load_argmin = i;
-		}
-
 #if STACCATO_DEBUG
 		load_samples.push_back(l);
 #endif
 	}
+}
 
-	if (m_load_argmin != m_load_argmax) {
-		bool ok = try_move_task(m_load_argmax, m_load_argmin);
-		if (ok) {
-			std::clog << "moved ";
-			std::clog << m_load_argmax << ":" << m_load_max << " -> ";
-			std::clog << m_load_argmin << ":" << m_load_min << "\n";
-		} else {
-			std::clog << "move failed\n";
+template <typename T>
+uint64_t dispatcher<T>::top_task_load(uint64_t load)
+{
+	if (load == 0)
+		return 0;
+
+	for (size_t i = 1; i < worker<T>::m_max_power_id; ++i)
+		if (worker<T>::m_power_of_width[i] > load)
+			return worker<T>::m_power_of_width[i-1];
+
+	return worker<T>::m_power_of_width[worker<T>::m_max_power_id-1];
+}
+
+template <typename T>
+bool dispatcher<T>::balance()
+{
+	// if (m_events[ITERATION] > 300)  
+	// 	return false;
+
+	uint64_t load_min = 0;
+	uint64_t load_max = 0;
+	size_t load_minpower = 0;
+	size_t load_maxpower = 0;
+	size_t load_argmin = 0;
+	size_t load_argmax = 0;
+	bool found_min = false;
+	bool found_max = false;
+
+	for (size_t i = 1; i < m_nworkers; ++i) {
+		worker_state *w = m_workers + i;
+
+		if (w->mailbox_size >= w->mailbox->capacity())
+			continue;
+
+		if (!found_min || w->load < load_min) {
+			load_min = w->load;
+			load_argmin = i;
+			found_min = true;
 		}
 	}
 
-	using namespace std::chrono_literals;
-	std::this_thread::sleep_for(100ms);
+	if (!found_min) {
+		m_events[MIGRATION_NO_MIN]++;
+		return false;
+	}
+
+	for (size_t i = 1; i < m_nworkers; ++i) {
+		worker_state *w = m_workers + i;
+
+		uint64_t l_top = top_task_load(w->load);
+		STACCATO_ASSERT(w->load >= l_top, "inconsistent powers");
+		uint64_t l_bottom = w->load - l_top;
+
+		if (l_bottom <= load_min)
+			continue;
+
+		if (!found_max || w->load > load_max) {
+			load_max = w->load;
+			load_argmax = i;
+			found_max = true;
+		}
+	}
+
+	if (!found_max) {
+		m_events[MIGRATION_NO_MAX]++;
+		return false;
+	}
+
+	if (load_argmax == load_argmin)
+		return false;
+
+	load_maxpower = max_power(load_max);
+	load_minpower = max_power(load_min);
+	STACCATO_ASSERT(load_maxpower >= load_minpower, "inconsitent powers");
+
+	if (load_maxpower - load_minpower < 2) {
+		m_events[MIGRATION_LOW_IMB]++;
+		return false;
+	}
+
+	bool moved = try_move_task(load_argmax, load_argmin);
+
+	if (moved) {
+		fprintf(stderr, "#%-5lu", m_events[ITERATION]);
+		// fprintf(stderr, " %2lu:", load_argmax);
+		print_load(load_max);
+		fprintf(stderr, " -> ");
+		// fprintf(stderr, " -> %2lu:", load_argmin);
+		print_load(load_min);
+		// fprintf(stderr, " delta = %10lu ", load_max - load_min);
+		// fprintf(stderr, " delta = ");
+		// print_load(load_max - load_min);
+
+		fprintf(stderr, "\n");
+	}
+	return moved;
 }
 
 template <typename T>
 void dispatcher<T>::loop()
 {
 	while (!load_relaxed(m_stopped)) {
-		update();
+		while (true) {
+			m_events[ITERATION]++;
+			update();
 
-		std::this_thread::yield();
+			if (balance()) {
+				m_events[MIGRATION_SUCCESS]++;
+			} else {
+				break;
+			}
+		}
+
+		using namespace std::chrono_literals;
+		std::this_thread::sleep_for(100ms);
+		// std::this_thread::yield();
 	}
 }
 
@@ -218,8 +315,11 @@ task<T> *dispatcher<T>::steal_task(task_deque<T> *head)
 			return t;
 
 		if (!was_empty) {
+			m_events[MIGRATION_FAIL_EMPTY]++;
 			now_stolen++;
 			continue;
+		} else {
+			m_events[MIGRATION_FAIL_RACE]++;
 		}
 
 		if (!tail->get_next())
@@ -237,16 +337,66 @@ bool dispatcher<T>::try_move_task(size_t w_from, size_t w_to)
 	if (!t)
 		return false;
 
+	m_workers[w_from].w->uncount_task(t->level());
+
+	m_workers[w_to].w->count_task(t->level());
 
 	m_workers[w_to].mailbox->put(reinterpret_cast<T *>(t));
 
 	return true;
 }
 
+template <typename T>
+size_t dispatcher<T>::max_power(uint64_t load)
+{
+	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+		if (!load)
+			break;
+
+		unsigned n = 0;
+		while (load >= worker<T>::m_power_of_width[i]) {
+			load -= worker<T>::m_power_of_width[i];
+			n++;
+		}
+
+		if (n)
+			return i;
+	}
+	return 0;
+}
+
+template <typename T>
+void dispatcher<T>::print_load(uint64_t load)
+{
+	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+		if (!load)
+			break;
+
+		unsigned n = 0;
+		while (load >= worker<T>::m_power_of_width[i]) {
+			load -= worker<T>::m_power_of_width[i];
+			n++;
+		}
+
+		if (n)
+			fprintf(stderr, "%ux%lu + ", n, worker<T>::m_max_power_id-i);
+	}
+}
+
+
 #if STACCATO_DEBUG
 template <typename T>
 void dispatcher<T>::print_stats()
 {
+	Debug() << "Dispatcher: ";
+	Debug() << "   iterations:     " << m_events[ITERATION];
+	Debug() << "   migrations:     " << m_events[MIGRATION_SUCCESS];
+	Debug() << "   failed no min:  " << m_events[MIGRATION_NO_MIN];
+	Debug() << "   failed no max:  " << m_events[MIGRATION_NO_MAX];
+	Debug() << "   failed empty:   " << m_events[MIGRATION_FAIL_EMPTY];
+	Debug() << "   failed race:    " << m_events[MIGRATION_FAIL_RACE];
+	Debug() << "   low imbalance:  " << m_events[MIGRATION_LOW_IMB];
+
 	std::ofstream out("load_samples.csv");
 	size_t rows = load_samples.size() / m_nworkers;
 

@@ -307,8 +307,12 @@ scheduler<T>::~scheduler()
 
 #if STACCATO_DEBUG
 	internal::counter::print_header();
-	for (size_t i = 0; i < m_nworkers; ++i)
-		m_workers[i].wkr->print_counters();
+	internal::counter totals;
+	for (size_t i = 0; i < m_nworkers; ++i) {
+		m_workers[i].wkr->get_counter().print_row(i);
+		totals.join(m_workers[i].wkr->get_counter());
+	}
+	totals.print_totals();
 	for (size_t i = 0; i < m_ndispatchers; ++i)
 		m_dispatchers[i].dsp->print_stats();
 #endif

@@ -31,17 +31,22 @@ public:
 		steal2_empty = 8,
 		dbg1         = 9,
 		dbg2         = 10,
+		
+		nr_events,
 	};
 
 	void count(event_e e);
 
 	static void print_header();
 
-	void print(size_t id) const;
+	void print_row(size_t id) const;
+
+	void print_totals() const;
+
+	void join(const counter &other);
 
 private:
-	static const size_t m_nconsters = 11;
-	static const int m_cell_width = 9;
+	static const int m_cell_width = 11;
 
 	static const constexpr char* const m_events[] = { 
 		"take",
@@ -57,20 +62,26 @@ private:
 		"dbg2"
 	};
 
-	unsigned long m_counters[m_nconsters];
+	unsigned long m_counters[nr_events];
 };
 
 const constexpr char* const counter::m_events[];
 
 counter::counter()
 {
-	memset(m_counters, 0, m_nconsters * sizeof(m_counters[0]));
+	memset(m_counters, 0, nr_events * sizeof(m_counters[0]));
 }
 
 void counter::count(event_e e)
 {
 	auto i = static_cast<size_t>(e);
 	m_counters[i]++;
+}
+
+void counter::join(const counter &other)
+{
+	for (size_t i = 0; i < nr_events; ++i)
+		m_counters[i] += other.m_counters[i];
 }
 
 void counter::print_header()
@@ -87,16 +98,41 @@ void counter::print_header()
 	fprintf(fp, "\n");
 }
 
-void counter::print(size_t id) const
+void counter::print_row(size_t id) const
 {
 	FILE *fp = stdout;
 
 	fprintf(fp, "[STACCATO]");
 	fprintf(fp, "%3lu |", id);
 
-	for (size_t i = 0; i < m_nconsters; ++i)
+	for (size_t i = 0; i < nr_events; ++i)
 		fprintf(fp, "%*lu |", m_cell_width, m_counters[i]);
 
+	fprintf(fp, "\n");
+}
+
+void counter::print_totals() const
+{
+	FILE *fp = stdout;
+
+	fprintf(fp, "[STACCATO]");
+	fprintf(fp, "tot |");
+
+	for (size_t i = 0; i < nr_events; ++i)
+		fprintf(fp, "%*lu |", m_cell_width, m_counters[i]);
+
+	fprintf(fp, "\n");
+
+	unsigned long nr_steals = 0;
+	nr_steals += m_counters[steal];
+	nr_steals += m_counters[steal_race];
+	nr_steals += m_counters[steal_empty];
+	nr_steals += m_counters[steal2];
+	nr_steals += m_counters[steal2_race];
+	nr_steals += m_counters[steal2_empty];
+	fprintf(fp, "steals:       %lu\n", nr_steals);
+	fprintf(fp, "take empty:   %lu\n", m_counters[take_empty]);
+	fprintf(fp, "take stolen:  %lu\n", m_counters[take_stolen]);
 	fprintf(fp, "\n");
 }
 
