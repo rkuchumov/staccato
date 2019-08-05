@@ -396,7 +396,7 @@ void worker<T>::count_task(unsigned level)
 	else
 		level = m_max_power_id - level;
 
-	add_relaxed(m_work_amount, m_power_of_width[level]);
+	add_release(m_work_amount, m_power_of_width[level]);
 }
 
 template <typename T>
@@ -409,13 +409,13 @@ void worker<T>::uncount_task(unsigned level)
 
 	STACCATO_ASSERT(m_power_of_width[level] <= m_work_amount, "inconsistent work_amount state");
 
-	sub_relaxed(m_work_amount, m_power_of_width[level]);
+	sub_release(m_work_amount, m_power_of_width[level]);
 }
 
 template <typename T>
 uint64_t worker<T>::get_load() const
 {
-	return load_relaxed(m_work_amount);
+	return load_acquire(m_work_amount);
 }
 
 template <typename T>

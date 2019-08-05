@@ -88,6 +88,9 @@
 #define add_relaxed(var, n) (var).fetch_add((n), std::memory_order_relaxed)
 #define sub_relaxed(var, n) (var).fetch_sub((n), std::memory_order_relaxed)
 
+#define add_release(var, n) (var).fetch_add((n), std::memory_order_release)
+#define sub_release(var, n) (var).fetch_sub((n), std::memory_order_release)
+
 namespace staccato
 {
 namespace internal

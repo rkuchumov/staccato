@@ -191,13 +191,12 @@ uint64_t dispatcher<T>::top_task_load(uint64_t load)
 template <typename T>
 bool dispatcher<T>::balance()
 {
-	// if (m_events[ITERATION] > 300)  
-	// 	return false;
+	// return false;
+	// if (m_events[ITERATION] > 100)  
+		// return false;
 
 	uint64_t load_min = 0;
 	uint64_t load_max = 0;
-	size_t load_minpower = 0;
-	size_t load_maxpower = 0;
 	size_t load_argmin = 0;
 	size_t load_argmax = 0;
 	bool found_min = false;
@@ -228,7 +227,7 @@ bool dispatcher<T>::balance()
 		STACCATO_ASSERT(w->load >= l_top, "inconsistent powers");
 		uint64_t l_bottom = w->load - l_top;
 
-		if (l_bottom <= load_min)
+		if (l_bottom <= load_min + l_top)
 			continue;
 
 		if (!found_max || w->load > load_max) {
@@ -246,30 +245,18 @@ bool dispatcher<T>::balance()
 	if (load_argmax == load_argmin)
 		return false;
 
-	load_maxpower = max_power(load_max);
-	load_minpower = max_power(load_min);
-	STACCATO_ASSERT(load_maxpower >= load_minpower, "inconsitent powers");
-
-	if (load_maxpower - load_minpower < 2) {
-		m_events[MIGRATION_LOW_IMB]++;
-		return false;
-	}
+	// fprintf(stderr, "#%-5lu", m_events[ITERATION]);
+	// fprintf(stderr, "%3zu ", load_argmax);
+	// fprintf(stderr, "%3zu ", load_argmin);
 
 	bool moved = try_move_task(load_argmax, load_argmin);
 
-	if (moved) {
-		fprintf(stderr, "#%-5lu", m_events[ITERATION]);
-		// fprintf(stderr, " %2lu:", load_argmax);
-		print_load(load_max);
-		fprintf(stderr, " -> ");
-		// fprintf(stderr, " -> %2lu:", load_argmin);
-		print_load(load_min);
-		// fprintf(stderr, " delta = %10lu ", load_max - load_min);
-		// fprintf(stderr, " delta = ");
-		// print_load(load_max - load_min);
-
-		fprintf(stderr, "\n");
-	}
+	// if (!moved)
+	// 	fprintf(stderr, "FAIL ");
+	// print_load(load_max);
+	// fprintf(stderr, " -> ");
+	// print_load(load_min);
+	// fprintf(stderr, "\n");
 	return moved;
 }
 
@@ -277,8 +264,8 @@ template <typename T>
 void dispatcher<T>::loop()
 {
 	while (!load_relaxed(m_stopped)) {
+		m_events[ITERATION]++;
 		while (true) {
-			m_events[ITERATION]++;
 			update();
 
 			if (balance()) {
@@ -298,36 +285,19 @@ template <typename T>
 task<T> *dispatcher<T>::steal_task(task_deque<T> *head)
 {
 	task_deque<T> *tail = head;
-	size_t now_stolen = 0;
 
-	while (true) {
-		if (now_stolen >= m_taskgraph_degree - 1) {
-			if (tail->get_next()) {
-				tail = tail->get_next();
-				now_stolen = 0;
-			}
-		}
+	bool was_empty = false;
+	auto t = tail->steal(&was_empty);
 
-		bool was_empty = false;
-		auto t = tail->steal(&was_empty);
+	if (t)
+		return t;
 
-		if (t)
-			return t;
+	if (!was_empty)
+		m_events[MIGRATION_FAIL_RACE]++;
+	else
+		m_events[MIGRATION_FAIL_EMPTY]++;
 
-		if (!was_empty) {
-			m_events[MIGRATION_FAIL_EMPTY]++;
-			now_stolen++;
-			continue;
-		} else {
-			m_events[MIGRATION_FAIL_RACE]++;
-		}
-
-		if (!tail->get_next())
-			return nullptr;
-
-		tail = tail->get_next();
-		now_stolen = 0;
-	}
+	return nullptr;
 }
 
 template <typename T>
@@ -342,6 +312,8 @@ bool dispatcher<T>::try_move_task(size_t w_from, size_t w_to)
 	m_workers[w_to].w->count_task(t->level());
 
 	m_workers[w_to].mailbox->put(reinterpret_cast<T *>(t));
+
+	// fprintf(stderr, "[%2u] ", t->level());
 
 	return true;
 }
