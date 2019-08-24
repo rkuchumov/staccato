@@ -348,8 +348,8 @@ int main(int argc, char *argv[])
 
 	{
 		scheduler<OperationTask> sh(8, nthreads);
-		sh.spawn(new(sh.root()) OperationTask(A, B, R, nblocks));
-		sh.wait();
+		OperationTask root(A, B, R, nblocks);
+		sh.spawn_and_wait(&root);
 	}
 
 	auto stop = system_clock::now();

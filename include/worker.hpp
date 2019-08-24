@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <thread>
 #include <limits>
+#include <limits>
 
 #include <pthread.h>
 
@@ -43,14 +44,21 @@ public:
 
 	void steal_loop();
 
-	T *root_allocate();
-	void root_commit(T *root);
-	void root_wait();
+	void spawn_root(T *root);
 
-	uint64_t get_load() const;
-	void count_task(unsigned level);
-	void uncount_task(unsigned level);
-	task_mailbox<T> *get_mailbox();
+	uint64_t get_deque_load() const;
+
+	void count_task_deque(unsigned level);
+	void uncount_task_deque(unsigned level);
+
+	void mail_task(T *task);
+
+	const T *get_mailed_task() const;
+
+	void print_load(uint64_t);
+
+	size_t min_power(uint64_t load);
+	static unsigned get_tasks_at_level(uint64_t load, unsigned level);
 
 #if STACCATO_DEBUG
 	const counter &get_counter() const;
@@ -81,16 +89,32 @@ private:
 
 	std::atomic_bool m_stopped;
 
+	std::atomic_bool m_assigned;
+
 	std::atomic_size_t m_nvictims;
 
 	task_deque<T> **m_victim_heads;
 
-	task_mailbox<T> *m_mailbox;
+	std::atomic<T *> m_mailed_task;
 
 	task_deque<T> *m_head;
 
-	std::atomic_ullong m_work_amount;
+	std::atomic_ullong m_deque_load;
 };
+
+template <typename T>
+void worker<T>::print_load(uint64_t load)
+{
+	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+		unsigned n = 0;
+		while (load >= worker<T>::m_power_of_width[i]) {
+			load -= worker<T>::m_power_of_width[i];
+			n++;
+		}
+
+		fprintf(stderr, "%u", n);
+	}
+}
 
 template <typename T>
 uint64_t worker<T>::m_power_of_width[64];
@@ -112,15 +136,14 @@ worker<T>::worker(
 , m_taskgraph_height(taskgraph_height)
 , m_allocator(alloc)
 , m_stopped(false)
+, m_assigned(false)
 , m_nvictims(0)
 , m_victim_heads(nullptr)
+, m_mailed_task(nullptr)
 , m_head(nullptr)
-, m_work_amount(0)
+, m_deque_load(0)
 {
 	m_victim_heads = m_allocator->alloc_array<task_deque<T> *>(nvictims);
-
-	m_mailbox = m_allocator->alloc<task_mailbox<T>>();
-	new(m_mailbox) task_mailbox<T>();
 
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
@@ -167,24 +190,9 @@ void worker<T>::stop()
 }
 
 template <typename T>
-T *worker<T>::root_allocate()
+void worker<T>::spawn_root(T *root)
 {
-	return m_head->put_allocate();
-}
-
-template <typename T>
-void worker<T>::root_commit(T *root)
-{
-	root->set_worker(this);
-	root->set_tail(m_head);
-	count_task(0);
-	m_head->put_commit();
-}
-
-template <typename T>
-void worker<T>::root_wait()
-{
-	local_loop(m_head);
+	root->process(this, m_head);
 }
 
 template <typename T>
@@ -237,12 +245,17 @@ void worker<T>::steal_loop()
 			now_stolen = 0;
 		}
 
-		t = m_mailbox->take();
+		t = load_acquire(m_mailed_task);
+
 		if (t) {
-			uncount_task(t->level());
+			store_release(m_mailed_task, nullptr);
 			victim = t->tail();
+			store_relaxed(m_assigned, true);
 			continue;
 		}
+
+		if (load_relaxed(m_assigned) == false)
+			continue;
 
 		if (victim == nullptr)
 			victim = get_victim_head();
@@ -267,7 +280,7 @@ void worker<T>::steal_loop()
 #endif
 
 		if (t) {
-			t->worker()->uncount_task(t->level());
+			t->worker()->uncount_task_deque(t->level());
 			continue;
 		}
 
@@ -306,35 +319,39 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		t = tail->take(&nstolen);
 
 #if STACCATO_DEBUG
-		if (t)
+		if (t) {
 			COUNT(take);
-		else if (nstolen == 0)
+		} else if (nstolen == 0) {
 			COUNT(take_empty);
-		else
+		} else {
 			COUNT(take_stolen);
+		}
 #endif
 
 		if (t) {
-			uncount_task(t->level());
+			if (t->level() < worker<T>::m_max_power_id)
+				STACCATO_ASSERT(get_tasks_at_level(m_deque_load, t->level()) > 0, "inconsistent m_deque_load");
+
+			uncount_task_deque(t->level());
+
 			victim = nullptr;
-			continue;
-		}
-
-		t = m_mailbox->take();
-
-		if (t) {
-			uncount_task(t->level());
-			victim = t->tail();
 			continue;
 		}
 
 		if (nstolen == 0)
 			return;
 
+		t = load_acquire(m_mailed_task);
+		if (t) {
+			store_release(m_mailed_task, nullptr);
+			victim = t->tail();
+			continue;
+		}
+
 		t = steal_task();
 
 		if (t) {
-			t->worker()->uncount_task(t->level());
+			t->worker()->uncount_task_deque(t->level());
 			victim = t->tail();
 			continue;
 		}
@@ -389,45 +406,74 @@ task<T> *worker<T>::steal_task()
 }
 
 template <typename T>
-void worker<T>::count_task(unsigned level)
+unsigned worker<T>::get_tasks_at_level(uint64_t load, unsigned level)
 {
-	if (level >= m_max_power_id)
-		level = 0;
-	else
-		level = m_max_power_id - level;
+	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+		if (!load)
+			break;
 
-	add_release(m_work_amount, m_power_of_width[level]);
+		unsigned n = 0;
+		while (load >= worker<T>::m_power_of_width[i]) {
+			load -= worker<T>::m_power_of_width[i];
+			n++;
+		}
+
+		if (worker<T>::m_max_power_id-i == level)
+			return n;
+	}
+
+	return 0;
 }
 
 template <typename T>
-void worker<T>::uncount_task(unsigned level)
+void worker<T>::count_task_deque(unsigned level)
 {
-	if (level >= m_max_power_id)
-		level = 0;
-	else
-		level = m_max_power_id - level;
+	if (level >= m_max_power_id) {
+		return;
+	}
 
-	STACCATO_ASSERT(m_power_of_width[level] <= m_work_amount, "inconsistent work_amount state");
+	level = m_max_power_id - level;
 
-	sub_release(m_work_amount, m_power_of_width[level]);
+	add_release(m_deque_load, m_power_of_width[level]);
 }
 
 template <typename T>
-uint64_t worker<T>::get_load() const
+void worker<T>::uncount_task_deque(unsigned level)
 {
-	return load_acquire(m_work_amount);
+	if (level >= m_max_power_id) {
+		return;
+	}
+
+	level = m_max_power_id - level;
+
+	STACCATO_ASSERT(m_power_of_width[level] <= m_deque_load, "inconsistent m_deque_load state");
+
+	sub_release(m_deque_load, m_power_of_width[level]);
 }
 
 template <typename T>
-task_mailbox<T> *worker<T>::get_mailbox()
+uint64_t worker<T>::get_deque_load() const
 {
-	return m_mailbox;
+	return load_acquire(m_deque_load);
 }
 
 template <typename T>
 task_deque<T> *worker<T>::get_deque()
 {
 	return m_head;
+}
+
+template <typename T>
+const T *worker<T>::get_mailed_task() const
+{
+	return load_relaxed(m_mailed_task);
+}
+
+template <typename T>
+void worker<T>::mail_task(T *task)
+{
+	STACCATO_ASSERT(!m_mailed_task, "a task is already mailed");
+	store_release(m_mailed_task, task);
 }
 
 #if STACCATO_DEBUG
@@ -439,6 +485,24 @@ const counter &worker<T>::get_counter() const
 } 
 #endif
 
+template <typename T>
+size_t worker<T>::min_power(uint64_t load)
+{
+	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+		if (!load)
+			break;
+
+		unsigned n = 0;
+		while (load >= worker<T>::m_power_of_width[i]) {
+			load -= worker<T>::m_power_of_width[i];
+			n++;
+		}
+
+		if (n)
+			return worker<T>::m_max_power_id-i;
+	}
+	return 0;
+}
 
 }
 }

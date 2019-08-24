@@ -64,9 +64,9 @@ int main(int argc, char *argv[])
 	auto start = system_clock::now();
 
 	{
+		DFSTask root(depth, breadth, &answer);
 		scheduler<DFSTask> sh(breadth, nthreads);
-		sh.spawn(new(sh.root()) DFSTask(depth, breadth, &answer));
-		sh.wait();
+		sh.spawn_and_wait(&root);
 	}
 
 	auto stop = system_clock::now();

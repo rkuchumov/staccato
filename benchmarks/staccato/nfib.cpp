@@ -64,8 +64,8 @@ int main(int argc, char *argv[])
 
 	{
 		scheduler<NFibTask> sh(N, nthreads);
-		sh.spawn(new(sh.root()) NFibTask(n, &answer));
-		sh.wait();
+		NFibTask root(n, &answer);
+		sh.spawn_and_wait(&root);
 	}
 
 	auto stop = system_clock::now();

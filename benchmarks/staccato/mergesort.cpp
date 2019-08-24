@@ -117,8 +117,8 @@ int main(int argc, char *argv[])
 
 	{
 		scheduler<SortTask> sh(2, nthreads);
-		sh.spawn(new(sh.root()) SortTask(0, n));
-		sh.wait();
+		SortTask root(0, n);
+		sh.spawn_and_wait(&root);
 	}
 
 	auto stop = system_clock::now();

@@ -2,6 +2,7 @@
 #define STACCATO_SCEDULER_H
 
 #include <cstdlib>
+#include <iomanip>
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -35,9 +36,7 @@ public:
 
 	~scheduler();
 
-	T *root();
-	void spawn(T *t);
-	void wait();
+	void spawn_and_wait(T *root);
 
 private:
 	struct worker_t {
@@ -91,15 +90,26 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
+	uint64_t w = taskgraph_degree + 1;
+
 	worker<T>::m_power_of_width[0] = 1;
-	worker<T>::m_power_of_width[1] = taskgraph_degree;
-	worker<T>::m_max_power_id = 63;
+	worker<T>::m_power_of_width[1] = w;
+	worker<T>::m_max_power_id = 62;
 	for (int i = 2; i < 64; ++i) {
-		worker<T>::m_power_of_width[i] = worker<T>::m_power_of_width[i-1] * taskgraph_degree;
+		worker<T>::m_power_of_width[i] = worker<T>::m_power_of_width[i-1] * w;
 		if (worker<T>::m_power_of_width[i] > worker<T>::m_power_of_width[i-1])
 			continue;
 		worker<T>::m_max_power_id = i - 2;
 		break;
+	}
+
+	uint64_t s = 0;
+	uint64_t s2 = 0;
+	std::cerr << "max power " << worker<T>::m_max_power_id << "\n";
+	for (int i = 0; i < worker<T>::m_max_power_id - 2; ++i) {
+		s += worker<T>::m_power_of_width[i];
+		s2 += 2*worker<T>::m_power_of_width[i];
+		std::cerr << std::setw(30) <<  worker<T>::m_power_of_width[i] << " " << std::setw(30) << s << " " << std::setw(30) << s2 << "\n";
 	}
 
 	create_workers();
@@ -338,21 +348,9 @@ scheduler<T>::~scheduler()
 }
 
 template <typename T>
-T *scheduler<T>::root()
+void scheduler<T>::spawn_and_wait(T *root)
 {
-	return m_master->root_allocate();
-}
-
-template <typename T>
-void scheduler<T>::spawn(T *root)
-{
-	m_master->root_commit(root);
-}
-
-template <typename T>
-void scheduler<T>::wait()
-{
-	m_master->root_wait();
+	m_master->spawn_root(root);
 }
 
 } /* namespace:staccato */ 

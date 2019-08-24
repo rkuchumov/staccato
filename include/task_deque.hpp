@@ -22,7 +22,6 @@ public:
 	task_deque(size_t size, T *mem);
 	~task_deque();
 
-	void set_prev(task_deque<T> *d);
 	void set_next(task_deque<T> *d);
 	void set_victim(task_deque<T> *d);
 
@@ -36,6 +35,9 @@ public:
 	T *take(size_t *);
 	T *steal(bool *was_empty);
 
+	size_t level() const;
+	void set_level(size_t level);
+
 private:
 	const size_t m_mask;
 
@@ -44,6 +46,7 @@ private:
 
 	task_deque<T> *m_next;
 
+	STACCATO_ALIGN std::atomic_size_t m_level;
 	STACCATO_ALIGN std::atomic_size_t m_nstolen;
 	STACCATO_ALIGN std::atomic_size_t m_top;
 	STACCATO_ALIGN std::atomic_size_t m_bottom;
@@ -150,6 +153,20 @@ T *task_deque<T>::steal(bool *was_empty)
 	}
 
 	return r;
+}
+
+template <typename T>
+void task_deque<T>::set_level(size_t level)
+{
+	// store_release(m_level, level);
+	m_level = level;
+}
+
+template <typename T>
+size_t task_deque<T>::level() const
+{
+	// return load_acquire(m_level);
+	return m_level;
 }
 
 template <typename T>

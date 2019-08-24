@@ -89,6 +89,7 @@ void task<T>::process(internal::worker<T> *worker, internal::task_deque<T> *tail
 {
 	m_worker = worker;
 	m_tail = tail;
+	m_tail->set_level(m_level);
 
 	execute();
 }
@@ -106,7 +107,7 @@ void task<T>::spawn(T *child)
 	child->m_worker = m_worker;
 	child->m_tail = m_tail;
 
-	m_worker->count_task(child->m_level);
+	m_worker->count_task_deque(child->m_level);
 	m_tail->put_commit();
 }
 
