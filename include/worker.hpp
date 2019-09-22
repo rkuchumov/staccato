@@ -28,6 +28,7 @@ public:
 	worker(
 		size_t id,
 		int core_id,
+		int node_id,
 		lifo_allocator *alloc,
 		size_t nvictims,
 		size_t taskgraph_degree,
@@ -57,19 +58,22 @@ public:
 
 	void print_load(uint64_t);
 
+#if STACCATO_DEBUG
 	size_t min_power(uint64_t load);
 	static unsigned get_tasks_at_level(uint64_t load, unsigned level);
 
-#if STACCATO_DEBUG
 	const counter &get_counter() const;
 #endif
 
 	task_deque<T> *get_deque();
 
-	static uint64_t m_power_of_width[64];
-	static unsigned m_max_power_id;
+	inline int node_id() const {
+		return m_node_id;
+	}
 
-private:
+	static void compute_powers(uint64_t taskgraph_degree);
+
+// private:
 	void init(size_t core_id, worker<T> *victim);
 
 	void grow_tail(task_deque<T> *tail);
@@ -78,7 +82,13 @@ private:
 
 	task<T> *steal_task();
 
+	static uint64_t m_n[64];
+	static unsigned m_d_max;
+
 	const size_t m_id;
+
+	const int m_node_id;
+
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
 	lifo_allocator *m_allocator;
@@ -105,33 +115,64 @@ private:
 template <typename T>
 void worker<T>::print_load(uint64_t load)
 {
-	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+	for (size_t i = worker<T>::m_d_max; i != 0; i--) {
 		unsigned n = 0;
-		while (load >= worker<T>::m_power_of_width[i]) {
-			load -= worker<T>::m_power_of_width[i];
+		while (load >= worker<T>::m_n[i]) {
+			load -= worker<T>::m_n[i];
 			n++;
 		}
 
-		fprintf(stderr, "%u", n);
+		std::cerr << n << "x" << worker<T>::m_d_max-i << " + ";
 	}
 }
 
 template <typename T>
-uint64_t worker<T>::m_power_of_width[64];
+uint64_t worker<T>::m_n[64];
 
 template <typename T>
-unsigned worker<T>::m_max_power_id;
+unsigned worker<T>::m_d_max;
+
+template <typename T>
+void worker<T>::compute_powers(uint64_t taskgraph_degree)
+{
+	m_n[0] = 1;
+	m_d_max = 62;
+
+	uint64_t s = 1;
+	uint64_t d = taskgraph_degree;
+
+	for (int i = 1; i < 64; ++i) {
+		s += d;
+		d *= taskgraph_degree;
+
+		worker<T>::m_n[i] = s;
+
+		if (m_n[i] > m_n[i-1])
+			continue;
+
+		m_d_max = i - 2;
+		break;
+	}
+
+	// for (int i = 0; i < m_d_max+2; ++i)
+	// 	std::clog << "n(" <<  i <<  ") = " << m_n[i] << "\n";
+    //
+	// std::cerr << "max id = " << m_d_max << "\n";
+
+}
 
 template <typename T>
 worker<T>::worker(
 	size_t id,
 	int core_id,
+	int node_id,
 	lifo_allocator *alloc,
 	size_t nvictims,
 	size_t taskgraph_degree,
 	size_t taskgraph_height
 )
 : m_id(id)
+, m_node_id(node_id)
 , m_taskgraph_degree(taskgraph_degree)
 , m_taskgraph_height(taskgraph_height)
 , m_allocator(alloc)
@@ -329,8 +370,14 @@ void worker<T>::local_loop(task_deque<T> *tail)
 #endif
 
 		if (t) {
-			if (t->level() < worker<T>::m_max_power_id)
+#if STACCATO_DEBUG
+			if (t->level() < worker<T>::m_d_max && get_tasks_at_level(m_deque_load, t->level()) == 0) {
+				std::cerr << t->level() << " ";
+				print_load(m_deque_load);
+				std::cerr << "\n";
 				STACCATO_ASSERT(get_tasks_at_level(m_deque_load, t->level()) > 0, "inconsistent m_deque_load");
+			}
+#endif
 
 			uncount_task_deque(t->level());
 
@@ -408,17 +455,17 @@ task<T> *worker<T>::steal_task()
 template <typename T>
 unsigned worker<T>::get_tasks_at_level(uint64_t load, unsigned level)
 {
-	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+	for (size_t i = worker<T>::m_d_max; i != 0; i--) {
 		if (!load)
 			break;
 
 		unsigned n = 0;
-		while (load >= worker<T>::m_power_of_width[i]) {
-			load -= worker<T>::m_power_of_width[i];
+		while (load >= worker<T>::m_n[i]) {
+			load -= worker<T>::m_n[i];
 			n++;
 		}
 
-		if (worker<T>::m_max_power_id-i == level)
+		if (worker<T>::m_d_max-i == level)
 			return n;
 	}
 
@@ -428,27 +475,26 @@ unsigned worker<T>::get_tasks_at_level(uint64_t load, unsigned level)
 template <typename T>
 void worker<T>::count_task_deque(unsigned level)
 {
-	if (level >= m_max_power_id) {
+	if (level >= m_d_max) {
 		return;
 	}
 
-	level = m_max_power_id - level;
+	level = m_d_max - level;
 
-	add_release(m_deque_load, m_power_of_width[level]);
+	m_deque_load += m_n[level];
 }
 
 template <typename T>
 void worker<T>::uncount_task_deque(unsigned level)
 {
-	if (level >= m_max_power_id) {
+	if (level >= m_d_max) {
 		return;
 	}
 
-	level = m_max_power_id - level;
+	level = m_d_max - level;
 
-	STACCATO_ASSERT(m_power_of_width[level] <= m_deque_load, "inconsistent m_deque_load state");
-
-	sub_release(m_deque_load, m_power_of_width[level]);
+	STACCATO_ASSERT(m_n[level] <= m_deque_load, "inconsistent m_deque_load state");
+	m_deque_load -= m_n[level];
 }
 
 template <typename T>
@@ -483,26 +529,27 @@ const counter &worker<T>::get_counter() const
 {
 	return m_counter;
 } 
-#endif
 
 template <typename T>
 size_t worker<T>::min_power(uint64_t load)
 {
-	for (size_t i = worker<T>::m_max_power_id; i != 0; i--) {
+	for (size_t i = worker<T>::m_d_max; i != 0; i--) {
 		if (!load)
 			break;
 
 		unsigned n = 0;
-		while (load >= worker<T>::m_power_of_width[i]) {
-			load -= worker<T>::m_power_of_width[i];
+		while (load >= worker<T>::m_n[i]) {
+			load -= worker<T>::m_n[i];
 			n++;
 		}
 
 		if (n)
-			return worker<T>::m_max_power_id-i;
+			return worker<T>::m_d_max-i;
 	}
 	return 0;
 }
+
+#endif
 
 }
 }

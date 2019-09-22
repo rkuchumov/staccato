@@ -1,5 +1,5 @@
 tests = [
-	['task_mailbox', ['task_mailbox.cc']],
+	# ['task_mailbox', ['task_mailbox.cc']],
 ]
 
 add_languages('cpp')

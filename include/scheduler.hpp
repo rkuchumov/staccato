@@ -55,10 +55,10 @@ private:
 
     inline size_t predict_page_size() const;
 
-	int get_worker_core(size_t id);
+	void get_worker_location(size_t id, int &core, int &node, int &nvicims);
 
 	void create_workers();
-	void create_worker(size_t id);
+	void create_worker(size_t id, int core, int node, int nvicims);
 
 	void create_dispatchers();
 	void create_dispatcher(size_t id);
@@ -90,27 +90,7 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
-	uint64_t w = taskgraph_degree + 1;
-
-	worker<T>::m_power_of_width[0] = 1;
-	worker<T>::m_power_of_width[1] = w;
-	worker<T>::m_max_power_id = 62;
-	for (int i = 2; i < 64; ++i) {
-		worker<T>::m_power_of_width[i] = worker<T>::m_power_of_width[i-1] * w;
-		if (worker<T>::m_power_of_width[i] > worker<T>::m_power_of_width[i-1])
-			continue;
-		worker<T>::m_max_power_id = i - 2;
-		break;
-	}
-
-	uint64_t s = 0;
-	uint64_t s2 = 0;
-	std::cerr << "max power " << worker<T>::m_max_power_id << "\n";
-	for (int i = 0; i < worker<T>::m_max_power_id - 2; ++i) {
-		s += worker<T>::m_power_of_width[i];
-		s2 += 2*worker<T>::m_power_of_width[i];
-		std::cerr << std::setw(30) <<  worker<T>::m_power_of_width[i] << " " << std::setw(30) << s << " " << std::setw(30) << s2 << "\n";
-	}
+	worker<T>::compute_powers(taskgraph_degree);
 
 	create_workers();
 
@@ -126,13 +106,19 @@ void scheduler<T>::create_workers()
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i].ready = false;
 
-	create_worker(0);
+	int nvictims = 1;
+	int core_id = -1;
+	int node_id = -1;
+
+	get_worker_location(0, core_id, node_id, nvictims);
+	create_worker(0, core_id, node_id, nvictims);
 	m_workers[0].thr = nullptr;
 	m_master = m_workers[0].wkr;
 
 	for (size_t i = 1; i < m_nworkers; ++i) {
+		get_worker_location(i, core_id, node_id, nvictims);
 		m_workers[i].thr = new std::thread([=] {
-			create_worker(i);
+			create_worker(i, core_id, node_id, nvictims);
 			m_workers[i].wkr->steal_loop();
 		});
 	}
@@ -142,12 +128,19 @@ void scheduler<T>::create_workers()
 			std::this_thread::yield();
 
 	for (size_t i = 0; i < m_nworkers; ++i) {
+		std::cerr << i << " (" << m_workers[i].wkr->node_id() << ") : ";
 		for (size_t j = 0; j < m_nworkers; ++j) {
 			if (i == j)
 				continue;
-			m_workers[i].wkr->cache_victim(m_workers[j].wkr);
+
+			if (m_workers[i].wkr->node_id() == m_workers[j].wkr->node_id()) {
+				std::cerr << j << " ";
+				m_workers[i].wkr->cache_victim(m_workers[j].wkr);
+			}
 		}
+		std::cerr << "\n";
 	}
+
 }
 
 template <typename T>
@@ -172,19 +165,24 @@ void scheduler<T>::create_dispatchers()
 }
 
 template <typename T>
-void scheduler<T>::create_worker(size_t id)
+void scheduler<T>::create_worker(size_t id, int core, int node, int nvictims)
 {
 	using namespace internal;
 
-	Debug() << "Init worker #" << id;
+	// Debug() << "Init worker #" << id;
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
-	int core_id = get_worker_core(id);
-
 	auto wkr = alloc->alloc<worker<T>>();
-	new(wkr)
-		worker<T>(id, core_id, alloc, m_nworkers, m_taskgraph_degree, m_taskgraph_height);
+	new(wkr) worker<T>(
+		id,
+		core,
+		node,
+		alloc,
+		nvictims,
+		m_taskgraph_degree,
+		m_taskgraph_height
+	);
 
 	m_workers[id].alloc = alloc;
 	m_workers[id].wkr = wkr;
@@ -200,10 +198,18 @@ void scheduler<T>::create_dispatcher(size_t id)
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
-	int core_id = 0;
+	int core_id = 13;
+	size_t nnodes = 1;
 
 	auto dsp = alloc->alloc<dispatcher<T>>();
-	new (dsp) dispatcher<T>(id, core_id, alloc, m_nworkers, m_taskgraph_degree);
+	new (dsp) dispatcher<T>(
+		id,
+		core_id,
+		nnodes,
+		alloc,
+		m_nworkers,
+		m_taskgraph_degree
+	);
 
 	m_dispatchers[id].alloc = alloc;
 	m_dispatchers[id].dsp = dsp;
@@ -241,49 +247,23 @@ int read_env_to_int(const char *name) {
 }
 
 template <typename T>
-int scheduler<T>::get_worker_core(size_t id)
+void scheduler<T>::get_worker_location(size_t id, int &core, int &node, int &nvictims)
 {
 	using namespace internal;
 
-	static int affinity = -1;
-	static int nsockets = -1;
-	static int nthreads = -1;
-	static int ncores = -1;
+	nvictims = 14;
+	node = id % 2;
+	core = 28 * (id % 2) + id / 2; 
 
-	if (affinity < 0) {
-		affinity = read_affinity();
-		Debug() << "affinity: " << affinity;
-	}
-	if (nsockets < 0) {
-		nsockets = read_env_to_int("STACCATO_NSOCKETS");
-		Debug() << "nsockets: " << nsockets;
-	}
-	if (nthreads < 0) {
-		nthreads = read_env_to_int("STACCATO_NTHREADS");
-		Debug() << "nthreads: " << nthreads;
-	}
-	if (ncores < 0) {
-		ncores = read_env_to_int("STACCATO_NCORES");
-		Debug() << "ncores: " << ncores;
-	}
+	// nvictims = 28;
+	// node = 0;
+	// core = 28 * (id % 2) + id / 2; 
+	
+	// nvictims = 28;
+	// node = 0;
+	// core = -1;
 
-	if (!affinity || !nthreads || !ncores || !nsockets)
-		return -1;
-
-	int core = -1;
-
-	if (affinity == 1) {
-		core = id; 
-	}
-
-	if (affinity == 2) {
-		core = ncores * nsockets * (id % nthreads) + id / nthreads; 
-	}
-
-	if (core >= 0)
-		Debug() << "Worker #" << id << " at core " << core;
-
-	return core;
+	Debug() << "Worker #" << id << "\t at node " << node << ", core " << core;
 }
 
 template <typename T>
