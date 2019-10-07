@@ -125,12 +125,13 @@ void counter::print_totals() const
 
 	unsigned long nr_steals = 0;
 	nr_steals += m_counters[steal];
-	// nr_steals += m_counters[steal_race];
-	// nr_steals += m_counters[steal_empty];
+	nr_steals += m_counters[steal_race];
+	nr_steals += m_counters[steal_empty];
 	nr_steals += m_counters[steal2];
-	// nr_steals += m_counters[steal2_race];
-	// nr_steals += m_counters[steal2_empty];
-	fprintf(fp, "steals:       %lu\n", nr_steals);
+	nr_steals += m_counters[steal2_race];
+	nr_steals += m_counters[steal2_empty];
+	fprintf(fp, "steal attempts:    %lu\n", nr_steals);
+	fprintf(fp, "steal migartions:  %lu\n", m_counters[steal] + m_counters[steal2]);
 	fprintf(fp, "take empty:   %lu\n", m_counters[take_empty]);
 	fprintf(fp, "take stolen:  %lu\n", m_counters[take_stolen]);
 	fprintf(fp, "\n");

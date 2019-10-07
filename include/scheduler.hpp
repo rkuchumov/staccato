@@ -198,8 +198,8 @@ void scheduler<T>::create_dispatcher(size_t id)
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
-	int core_id = 13;
-	size_t nnodes = 1;
+	int core_id = 41;
+	size_t nnodes = 2;
 
 	auto dsp = alloc->alloc<dispatcher<T>>();
 	new (dsp) dispatcher<T>(
@@ -251,17 +251,25 @@ void scheduler<T>::get_worker_location(size_t id, int &core, int &node, int &nvi
 {
 	using namespace internal;
 
+	// nvictims = 28;
+	// node = 0;
+
 	nvictims = 14;
 	node = id % 2;
-	core = 28 * (id % 2) + id / 2; 
+
+	core = 14 * (id % 2) + id / 2; 
 
 	// nvictims = 28;
 	// node = 0;
-	// core = 28 * (id % 2) + id / 2; 
-	
+	// core = 14 * (id % 2) + id / 2; 
+
 	// nvictims = 28;
 	// node = 0;
 	// core = -1;
+
+	// nvictims = 14;
+	// node = 0;
+	// core = id; 
 
 	Debug() << "Worker #" << id << "\t at node " << node << ", core " << core;
 }

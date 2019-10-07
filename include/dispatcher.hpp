@@ -54,8 +54,11 @@ private:
 		worker<T> *w;
 		size_t node_id;
 		task_deque<T> *head;
-		const T *mailed_task;
+
 		uint64_t load_deque;
+		uint64_t load_mailbox;
+		bool mailable;
+		bool assigned;
 	};
 
 	void print_load(uint64_t l);
@@ -64,6 +67,10 @@ private:
 	void update();
 
 	bool balance(size_t node);
+
+	bool balance_top_level();
+
+	bool balance_reset();
 
 	bool balance_between_nodes();
 
@@ -102,6 +109,10 @@ private:
 		MIGRATION_SUCCESS_NODES,
 		MIGRATION_LOW_IMB,
 		MIGRATION_LOW_LEVEL,
+		DBG_0,
+		DBG_1,
+		DBG_2,
+		DBG_3,
 		ZERO_LOAD,
 
 		NR_EVENTS
@@ -130,6 +141,8 @@ dispatcher<T>::dispatcher(
 	memset(m_events, 0, sizeof(m_events));
 
 	m_workers = m_allocator->alloc_array<worker_state>(nworkers);
+	for (size_t i = 0; i < m_nworkers; ++i)
+		m_workers[i].assigned = false;
 
 	if (core_id >= 0) {
 		cpu_set_t cpuset;
@@ -168,25 +181,27 @@ void dispatcher<T>::update()
 {
 	uint64_t l = m_workers[0].w->get_deque_load();
 	m_workers[0].load_deque = l;
-	m_workers[0].mailed_task = m_workers[0].w->get_mailed_task();
+	m_workers[0].mailable = m_workers[0].w->is_mailable();
+	m_workers[0].load_mailbox = m_workers[0].w->get_mailbox_load();
 
 
 	if (l == 0)
 		m_events[ZERO_LOAD]++;
 #if STACCATO_DEBUG
-	load_samples.push_back(l);
+	// load_samples.push_back(l);
 #endif
 
 	for (size_t i = 1; i < m_nworkers; ++i) {
 		uint64_t l = m_workers[i].w->get_deque_load();
 		m_workers[i].load_deque = l;
-		m_workers[i].mailed_task = m_workers[i].w->get_mailed_task();
+		m_workers[i].mailable = m_workers[i].w->is_mailable();
+		m_workers[i].load_mailbox = m_workers[i].w->get_mailbox_load();
 
 		if (l == 0)
 			m_events[ZERO_LOAD]++;
 
 #if STACCATO_DEBUG
-		load_samples.push_back(l);
+		// load_samples.push_back(l);
 #endif
 	}
 }
@@ -205,103 +220,92 @@ uint64_t dispatcher<T>::top_task_load(uint64_t load)
 }
 
 template <typename T>
-bool dispatcher<T>::balance_between_nodes()
+bool dispatcher<T>::balance_top_level()
 {
-	uint64_t load_min = 0;
-	uint64_t load_max_0 = 0;
-	uint64_t load_max_0_top = 0;
-	size_t load_argmin = 0;
-	size_t load_argmax_0 = 0;
-	bool found_min = false;
-	bool found_max_0 = false;
+	size_t top_level_left = 7;
 
-	uint64_t load_0 = 0;
-	uint64_t load_1 = 0;
+	while (!load_relaxed(m_stopped)) {
+		m_events[ITERATION]++;
+		// fprintf(stderr, "#%-5lu ", m_events[ITERATION]);
 
-	for (size_t i = 0; i < m_nworkers; ++i) {
-		worker_state *w = m_workers + i;
-
-		auto load = w->load_deque;
-
-		if (w->node_id == 0) {
-			load_0 += load;
-
-			uint64_t lt = top_task_load(load);
-
-			if (load != lt) {
-				if (!found_max_0 || lt > load_max_0_top) {
-					load_max_0_top = lt;
-					load_max_0 = load;
-					load_argmax_0 = i;
-					found_max_0 = true;
-				}
-			}
+		// update();
+		task<T> *t = steal_task(m_workers[0].head, 1);
+		if (!t) {
+			// print_load(m_workers[0].load_deque);
+			// fprintf(stderr, " steal fail\n");
+			// using namespace std::chrono_literals;
+			// std::this_thread::sleep_for(50ms);
+			std::this_thread::yield();
+			continue;
 		}
 
-		if (w->node_id == 1) {
-			load_1 += load;
+		t->worker()->uncount_task_deque(t->level());
+		// fprintf(stderr, "stolen: %u ", t->level());
+
+		size_t recipient_node;
+		if (top_level_left > 4)
+			recipient_node = 0;
+		else
+			recipient_node = 1;
+
+		// fprintf(stderr, " move_to node: %zd", recipient_node);
+
+		size_t recipient = 0;
+		bool found_recipient = 0;
+
+		for (size_t i = 1; i < m_nworkers; ++i) {
+			worker_state *w = m_workers + i;
+
+			if (w->node_id != recipient_node)
+				continue;
+
+			// if (!w->mailable)
+			// 	continue;
+
+			if (w->assigned)
+				continue;
+
+			found_recipient = true;
+			recipient = i;
+			break;
 		}
+
+		if (!found_recipient) {
+			// fprintf(stderr, " recipient not found\n");
+			STACCATO_ASSERT(false, "fuck");
+			return false;
+		}
+
+		// fprintf(stderr, " id: %zd", recipient);
+
+		m_workers[recipient].w->mail_task(reinterpret_cast<T *>(t));
+		m_workers[recipient].assigned = true;
+
+		top_level_left--;
+
+		if (top_level_left == 0) {
+			fprintf(stderr, " done\n");
+			return true;
+		}
+
+		// fprintf(stderr, " left: %zd\n", top_level_left);
 	}
 
-	if (!found_max_0)
-		return false;
-
-	if (load_max_0_top == load_max_0)
-		return false;
-
-	if (load_max_0_top >= load_0)
-		return false;
-
-	if (load_1 + load_max_0_top >= load_0 - load_max_0_top)
-		return false;
-
-	for (size_t i = 0; i < m_nworkers; ++i) {
-		worker_state *w = m_workers + i;
-
-		if (w->node_id == 0)
-			continue;
-
-		if (w->mailed_task)
-			continue;
-
-		auto load = w->load_deque;
-
-		if (!found_min || load < load_min) {
-			load_min = load;
-			load_argmin = i;
-			found_min = true;
-		}
-	}
-
-	if (!found_min)
-		return false;
-
-	fprintf(stderr, "#%-5lu", m_events[ITERATION]);
-
-	fprintf(stderr, ".. %3zu %3zu ", load_argmax_0, load_argmin);
-
-	bool moved = false;
-	moved = try_move_task(load_argmax_0, load_argmin, min_power(load_max_0));
-	fprintf(stderr, "[%2zd] ", min_power(load_max_0));
-	if (!moved) fprintf(stderr, "FAIL ");
-	print_load(m_workers[load_argmax_0].load_deque);
-	fprintf(stderr, " | ");
-	fprintf(stderr, " -> ");
-	print_load(m_workers[load_argmin].load_deque);
-	fprintf(stderr, "\n");
-
-	return moved;
+	return true;
 }
+
+
 
 template <typename T>
 bool dispatcher<T>::balance(size_t node)
 {
-	uint64_t load_min = 0;
-	uint64_t load_max = 0;
-	size_t load_argmin = 0;
-	size_t load_argmax = 0;
-	bool found_min = false;
 	bool found_max = false;
+	size_t load_argmax = 0;
+	uint64_t load_max = 0;
+	uint64_t load_max_top = 0;
+
+	bool found_min = false;
+	size_t load_argmin = 0;
 
 	for (size_t i = 0; i < m_nworkers; ++i) {
 		worker_state *w = m_workers + i;
@@ -309,114 +313,165 @@ bool dispatcher<T>::balance(size_t node)
 		if (w->node_id != node)
 			continue;
 
-		auto load = w->load_deque;
-
-		if (top_task_load(load) == load)
+		if (!w->assigned)
 			continue;
 
-		if (!found_max || load > load_max) {
+		auto load = w->load_deque;
+		auto load_top = top_task_load(load);
+
+		if (load_top == load)
+			continue;
+
+		if (!found_max || load_top > load_max_top) {
+			load_max_top = load_top;
 			load_max = load;
 			load_argmax = i;
 			found_max = true;
 		}
 	}
 
+	if (!found_max || load_max == 0) {
+		return false;
+		for (size_t i = 0; i < m_nworkers; ++i) {
+			worker_state *w = m_workers + i;
+
+			if (w->node_id != node)
+				continue;
+
+			print_load(w->load_deque);
+			fprintf(stderr, " | ");
+		}
+		STACCATO_ASSERT(found_max, "max not found");
+	}
+
 	for (size_t i = 0; i < m_nworkers; ++i) {
 		worker_state *w = m_workers + i;
 
 		if (w->node_id != node)
 			continue;
 
-		if (w->mailed_task)
+		if (w->assigned)
 			continue;
 
-		uint64_t l_top = top_task_load(load_max);
-
-		auto load = w->load_deque;
-
-		if (load + l_top >= load_max)
-			continue;
-
-		if (!found_min || load < load_min) {
-			load_min = load;
-			load_argmin = i;
-			found_min = true;
-		}
+		found_min = true;
+		load_argmin = i;
+		break;
 	}
 
 	if (!found_min) {
+		// fprintf(stderr, "node:%zd MIN not found \n", node);
 		m_events[MIGRATION_NO_MIN]++;
 		return false;
 	}
 
-	if (!found_max) {
-		m_events[MIGRATION_NO_MAX]++;
-		return false;
-	}
+	// fprintf(stderr, "#%-5lu", m_events[ITERATION]);
+	// fprintf(stderr, "N%zd ", node);
+	// fprintf(stderr, "argmax:%3zu ", load_argmax);
+	// fprintf(stderr, "argmin:%3zu ", load_argmin);
+    //
+	// fprintf(stderr, "[%2zd] ", min_power(load_max_top));
+	bool moved = try_move_task(load_argmax, load_argmin, min_power(load_max_top));
+	// if (!moved)
+	// 	fprintf(stderr, "FAIL ");
 
-	if (load_argmax == load_argmin)
-		return false;
-
-	fprintf(stderr, "#%-5lu", m_events[ITERATION]);
-	fprintf(stderr, "N%zd ", node);
-	fprintf(stderr, "%3zu ", load_argmax);
-	fprintf(stderr, "%3zu ", load_argmin);
-
-	fprintf(stderr, "[%2zd] ", min_power(load_max));
-	bool moved = try_move_task(load_argmax, load_argmin, min_power(load_max));
-
-	if (!moved)
-		fprintf(stderr, "FAIL ");
-	print_load(m_workers[load_argmax].load_deque);
-	fprintf(stderr, " | ");
-	fprintf(stderr, " -> ");
-	print_load(m_workers[load_argmin].load_deque);
-	fprintf(stderr, "\n");
+	m_workers[load_argmin].assigned = true;
+	// print_load(m_workers[load_argmax].load_deque);
+	// fprintf(stderr, " | ");
+	// fprintf(stderr, " -> ");
+	// print_load(m_workers[load_argmin].load_deque);
+	// fprintf(stderr, "\n");
 	return moved;
 }
 
 template <typename T>
 void dispatcher<T>::loop()
 {
+	if (m_nnodes == 0) {
+		while (!load_relaxed(m_stopped)) {
+			using namespace std::chrono_literals;
+			std::this_thread::sleep_for(100ms);
+			std::this_thread::yield();
+		}
+		return;
+	}
+
+	balance_top_level();
+
 	while (!load_relaxed(m_stopped)) {
 		m_events[ITERATION]++;
 
-		while (m_nnodes) {
-			update();
-			if (balance_between_nodes())
-				m_events[MIGRATION_SUCCESS_NODES]++;
-			else
-				break;
+		update();
+
+		bool b0 = false;
+		bool b1 = false;
+
+		if (balance(0)) {
+			m_events[MIGRATION_SUCCESS_0]++;
+			b0 = true;
 		}
 
-		while (true) {
-			update();
+		if (balance(1)) {
+			m_events[MIGRATION_SUCCESS_1]++;
+			b1 = true;
+		}
 
-			bool b0 = false;
-			bool b1 = false;
+		if (b0 || b1) {
+			continue;
+		} 
 
-			if (balance(0)) {
-				m_events[MIGRATION_SUCCESS_0]++;
-				b0 = true;
-			}
-
-			if (m_nnodes) {
-				if (balance(1)) {
-					m_events[MIGRATION_SUCCESS_1]++;
-					b1 = true;
-				}
-			}
-
-			if (b0 || b1)
+		bool found_idle = false;
+		for (size_t i = 1; i < m_nworkers; ++i) {
+			if (m_workers[i].assigned)
 				continue;
-			else
-				break;
+			found_idle = true;
+			break;
 		}
 
-		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(100ms);
-		// std::this_thread::yield();
+		if (!found_idle)
+			break;
 	}
+
+	fprintf(stderr, "Dispatcher exit\n");
+
+	// while (!load_relaxed(m_stopped)) {
+	// 	m_events[ITERATION]++;
+    //
+	// 	while (m_nnodes > 1) {
+	// 		update();
+	// 		if (balance_top_level())
+	// 			m_events[MIGRATION_SUCCESS_NODES]++;
+	// 		else
+	// 			break;
+	// 	}
+    //
+	// 	// while (true) {
+	// 	// 	update();
+    //     //
+	// 	// 	bool b0 = false;
+	// 	// 	bool b1 = false;
+    //     //
+	// 	// 	if (balance(0)) {
+	// 	// 		m_events[MIGRATION_SUCCESS_0]++;
+	// 	// 		b0 = true;
+	// 	// 	}
+    //     //
+	// 	// 	if (m_nnodes > 1) {
+	// 	// 		if (balance(1)) {
+	// 	// 			m_events[MIGRATION_SUCCESS_1]++;
+	// 	// 			b1 = true;
+	// 	// 		}
+	// 	// 	}
+    //     //
+	// 	// 	if (b0 || b1)
+	// 	// 		continue;
+	// 	// 	else
+	// 	// 		break;
+	// 	// }
+    //
+	// 	using namespace std::chrono_literals;
+	// 	std::this_thread::sleep_for(50ms);
+	// 	// std::this_thread::yield();
+	// }
 }
 
 template <typename T>
@@ -530,24 +585,28 @@ void dispatcher<T>::print_stats()
 	Debug() << "   low imbalance:    " << m_events[MIGRATION_LOW_IMB];
 	Debug() << "   low level:        " << m_events[MIGRATION_LOW_LEVEL];
 	Debug() << "   zero load:        " << m_events[ZERO_LOAD];
+	Debug() << "   DBG_0:        " << m_events[DBG_0];
+	Debug() << "   DBG_1:        " << m_events[DBG_1];
+	Debug() << "   DBG_2:        " << m_events[DBG_2];
+	Debug() << "   DBG_3:        " << m_events[DBG_3];
 
-	std::ofstream out("load_samples.csv");
-	size_t rows = load_samples.size() / m_nworkers;
-
-	out << "i";
-	for (size_t w = 0; w < m_nworkers; ++w)
-		out << ",w" << w;
-	out << "\n";
-
-	size_t i = 0;
-	for (size_t r = 0; r < rows; ++r) {
-		out << r;
-		for (size_t w = 0; w < m_nworkers; ++w) {
-			out << "," << load_samples[i];
-			i++;
-		}
-		out << "\n";
-	}
+	// std::ofstream out("load_samples.csv");
+	// size_t rows = load_samples.size() / m_nworkers;
+    //
+	// out << "i";
+	// for (size_t w = 0; w < m_nworkers; ++w)
+	// 	out << ",w" << w;
+	// out << "\n";
+    //
+	// size_t i = 0;
+	// for (size_t r = 0; r < rows; ++r) {
+	// 	out << r;
+	// 	for (size_t w = 0; w < m_nworkers; ++w) {
+	// 		out << "," << load_samples[i];
+	// 		i++;
+	// 	}
+	// 	out << "\n";
+	// }
 }
 #endif
 

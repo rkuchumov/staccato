@@ -16,7 +16,7 @@ namespace staccato
 namespace internal
 {
 
-template <typename T, size_t N = 4>
+template <typename T, size_t N = 16>
 class task_mailbox
 {
 public:

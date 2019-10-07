@@ -11,9 +11,9 @@
 #include "utils.hpp"
 
 #include "task_deque.hpp"
+#include "task_mailbox.hpp"
 #include "lifo_allocator.hpp"
 #include "task.hpp"
-#include "task_mailbox.hpp"
 #include "counter.hpp"
 
 namespace staccato
@@ -48,13 +48,17 @@ public:
 	void spawn_root(T *root);
 
 	uint64_t get_deque_load() const;
+	uint64_t get_mailbox_load() const;
 
 	void count_task_deque(unsigned level);
 	void uncount_task_deque(unsigned level);
+	void count_task_mailbox(unsigned level);
+	void uncount_task_mailbox(unsigned level);
+	bool is_mailable();
 
 	void mail_task(T *task);
 
-	const T *get_mailed_task() const;
+	task_mailbox<T> *get_mailbox() const;
 
 	void print_load(uint64_t);
 
@@ -105,9 +109,11 @@ public:
 
 	task_deque<T> **m_victim_heads;
 
-	std::atomic<T *> m_mailed_task;
+	task_mailbox<T> *m_mailbox;
 
 	task_deque<T> *m_head;
+
+	std::atomic_ullong m_mailbox_load;
 
 	std::atomic_ullong m_deque_load;
 };
@@ -180,11 +186,13 @@ worker<T>::worker(
 , m_assigned(false)
 , m_nvictims(0)
 , m_victim_heads(nullptr)
-, m_mailed_task(nullptr)
 , m_head(nullptr)
 , m_deque_load(0)
 {
 	m_victim_heads = m_allocator->alloc_array<task_deque<T> *>(nvictims);
+
+	m_mailbox = m_allocator->alloc<task_mailbox<T>>();
+	new(m_mailbox) task_mailbox<T>();
 
 	auto d = m_allocator->alloc<task_deque<T>>();
 	auto t = m_allocator->alloc_array<T>(m_taskgraph_degree);
@@ -286,17 +294,18 @@ void worker<T>::steal_loop()
 			now_stolen = 0;
 		}
 
-		t = load_acquire(m_mailed_task);
+		t = m_mailbox->take();
 
 		if (t) {
-			store_release(m_mailed_task, nullptr);
 			victim = t->tail();
+			uncount_task_mailbox(t->level());
 			store_relaxed(m_assigned, true);
 			continue;
 		}
 
-		if (load_relaxed(m_assigned) == false)
+		if (load_relaxed(m_assigned) == false) {
 			continue;
+		}
 
 		if (victim == nullptr)
 			victim = get_victim_head();
@@ -310,6 +319,7 @@ void worker<T>::steal_loop()
 
 		bool was_empty = false;
 		t = victim->steal(&was_empty);
+		// t = nullptr;
 
 #if STACCATO_DEBUG
 		if (t)
@@ -371,12 +381,12 @@ void worker<T>::local_loop(task_deque<T> *tail)
 
 		if (t) {
 #if STACCATO_DEBUG
-			if (t->level() < worker<T>::m_d_max && get_tasks_at_level(m_deque_load, t->level()) == 0) {
-				std::cerr << t->level() << " ";
-				print_load(m_deque_load);
-				std::cerr << "\n";
-				STACCATO_ASSERT(get_tasks_at_level(m_deque_load, t->level()) > 0, "inconsistent m_deque_load");
-			}
+			// if (t->level() < worker<T>::m_d_max && get_tasks_at_level(m_deque_load, t->level()) == 0) {
+			// 	std::cerr << t->level() << " ";
+			// 	print_load(m_deque_load);
+			// 	std::cerr << "\n";
+			// 	STACCATO_ASSERT(get_tasks_at_level(m_deque_load, t->level()) > 0, "inconsistent m_deque_load");
+			// }
 #endif
 
 			uncount_task_deque(t->level());
@@ -388,14 +398,15 @@ void worker<T>::local_loop(task_deque<T> *tail)
 		if (nstolen == 0)
 			return;
 
-		t = load_acquire(m_mailed_task);
+		t = m_mailbox->take();
 		if (t) {
-			store_release(m_mailed_task, nullptr);
+			uncount_task_mailbox(t->level());
 			victim = t->tail();
 			continue;
 		}
 
 		t = steal_task();
+		// t = nullptr;
 
 		if (t) {
 			t->worker()->uncount_task_deque(t->level());
@@ -452,6 +463,7 @@ task<T> *worker<T>::steal_task()
 	}
 }
 
+#if STACCATO_DEBUG
 template <typename T>
 unsigned worker<T>::get_tasks_at_level(uint64_t load, unsigned level)
 {
@@ -470,6 +482,38 @@ unsigned worker<T>::get_tasks_at_level(uint64_t load, unsigned level)
 	}
 
 	return 0;
+}
+#endif
+
+template <typename T>
+void worker<T>::count_task_mailbox(unsigned level)
+{
+	if (level >= m_d_max) {
+		return;
+	}
+
+	level = m_d_max - level;
+
+	m_mailbox_load += m_n[level];
+}
+
+template <typename T>
+void worker<T>::uncount_task_mailbox(unsigned level)
+{
+	if (level >= m_d_max) {
+		return;
+	}
+
+	level = m_d_max - level;
+
+	STACCATO_ASSERT(m_n[level] <= m_mailbox_load, "inconsistent m_mailbox_load state");
+	m_mailbox_load -= m_n[level];
+}
+
+template <typename T>
+bool worker<T>::is_mailable()
+{
+	return m_mailbox->size() + 1 < m_mailbox->capacity();
 }
 
 template <typename T>
@@ -504,22 +548,23 @@ uint64_t worker<T>::get_deque_load() const
 }
 
 template <typename T>
+uint64_t worker<T>::get_mailbox_load() const
+{
+	return load_acquire(m_mailbox_load);
+}
+
+template <typename T>
 task_deque<T> *worker<T>::get_deque()
 {
 	return m_head;
 }
 
 template <typename T>
-const T *worker<T>::get_mailed_task() const
-{
-	return load_relaxed(m_mailed_task);
-}
-
-template <typename T>
 void worker<T>::mail_task(T *task)
 {
-	STACCATO_ASSERT(!m_mailed_task, "a task is already mailed");
-	store_release(m_mailed_task, task);
+	STACCATO_ASSERT(m_mailbox->size() + 1 < m_mailbox->capacity(), "full mailbox");
+	count_task_mailbox(task->level());
+	m_mailbox->put(task);
 }
 
 #if STACCATO_DEBUG
