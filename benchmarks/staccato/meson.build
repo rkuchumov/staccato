@@ -4,6 +4,7 @@ benchs = [
 	['dfs', ['dfs.cpp']],
 	['blkmul', ['blkmul.cpp']],
 	['matmul', ['matmul.cpp']],
+	['counter', ['counter.cpp']],
 ]
 
 foreach t : benchs

@@ -8,7 +8,8 @@
 #include <vector>
 #include <functional>
 #include <mutex>
-#include <algorithm>
+
+#include <hwloc.h>
 
 #include "utils.hpp"
 #include "debug.hpp"
@@ -17,8 +18,6 @@
 #include "dispatcher.hpp"
 #include "lifo_allocator.hpp"
 #include "counter.hpp"
-
-#include <hwloc.h>
 
 namespace staccato
 {
@@ -30,11 +29,11 @@ template <typename T>
 class scheduler
 {
 public:
+
 	scheduler(
 		size_t taskgraph_degree,
 		size_t nworkers = 0,
-		size_t taskgraph_height = 1,
-		bool single_node = true
+		size_t taskgraph_height = 1
 	);
 
 	~scheduler();
@@ -58,44 +57,34 @@ private:
 
     inline size_t predict_page_size() const;
 
+	void get_worker_location(size_t id, int &core, int &node, int &nvicims);
+
 	void create_workers();
 	void create_worker(size_t id, int core, int node, int nvicims);
 
-	void create_dispatcher();
-
-	void parse_topology();
-
-	void parse_topology(
-		hwloc_topology_t topology,
-		hwloc_obj_t obj
-	);
+	void create_dispatchers();
+	void create_dispatcher(size_t id);
 
 	const size_t m_taskgraph_degree;
 	const size_t m_taskgraph_height;
 
-	std::vector<std::vector<unsigned> > m_topology;
-
 	size_t m_nworkers;
+	size_t m_ndispatchers;
 	worker_t *m_workers;
-	dispatcher_t *m_dispatcher;
+	dispatcher_t *m_dispatchers;
 	internal::worker<T> *m_master;
-	bool m_single_node;
 };
 
 template <typename T>
 scheduler<T>::scheduler(
 	size_t taskgraph_degree,
 	size_t nworkers,
-	size_t taskgraph_height,
-	bool single_node
+	size_t taskgraph_height
 )
 : m_taskgraph_degree(internal::next_pow2(taskgraph_degree))
 , m_taskgraph_height(taskgraph_height)
 , m_nworkers(nworkers)
-, m_workers(nullptr)
-, m_dispatcher(nullptr)
-, m_master(nullptr)
-, m_single_node(single_node)
+, m_ndispatchers(1)
 {
 	using namespace internal;
 	internal::Debug() << "Scheduler is working in debug mode";
@@ -103,67 +92,11 @@ scheduler<T>::scheduler(
 	if (m_nworkers == 0)
 		m_nworkers = std::thread::hardware_concurrency();
 
-	parse_topology();
+	worker<T>::compute_powers(taskgraph_degree);
 
 	create_workers();
 
-	if (m_topology.size() > 1) {
-		create_dispatcher();
-	} else {
-		for (size_t i = 0; i < m_nworkers; ++i)
-			m_workers[i].wkr->allow_stealing();
-	}
-}
-
-template <typename T>
-void scheduler<T>::parse_topology(
-	hwloc_topology_t topology,
-	hwloc_obj_t obj
-) {
-
-	if (obj->type == HWLOC_OBJ_NUMANODE)
-		m_topology.push_back(std::vector<unsigned>());
-
-	if (obj->type == HWLOC_OBJ_PU) {
-		if (m_topology.empty())
-			m_topology.push_back(std::vector<unsigned>());
-		m_topology.back().push_back(obj->os_index);
-	}
-
-	for (unsigned i = 0; i < obj->arity; i++) {
-		parse_topology(topology, obj->children[i]);
-	}
-}
-
-template <typename T>
-void scheduler<T>::parse_topology()
-{
-	using namespace internal;
-
-	if (m_single_node) {
-		m_topology.push_back(std::vector<unsigned>());
-		for (size_t i = 0; i < std::thread::hardware_concurrency(); i++)
-			m_topology[0].push_back(i);
-		return;
-	}
-
-	hwloc_topology_t topology;
-
-	hwloc_topology_init(&topology);
-	hwloc_topology_load(topology);
-
-	parse_topology(topology, hwloc_get_root_obj(topology));
-
-	hwloc_topology_destroy(topology);
-
-	for (size_t n = 0; n < m_topology.size(); ++n) {
-		std::sort(m_topology[n].begin(), m_topology[n].end());
-
-		Debug() << "NUMA " << n << ", no. of cores: " << m_topology[n].size();
-		// for (size_t c = 0; c < m_topology[n].size(); ++c)
-		// 	std::cout << m_topology[n][c] << " ";
-		// std::cout << "\n";
-	}
+	create_dispatchers();
 }
 
 template <typename T>
@@ -171,30 +104,36 @@ void scheduler<T>::create_workers()
 {
 	using namespace internal;
 
+	hwloc_topology_t topology;
+	int nbcores;
+
+	hwloc_topology_init(&topology);  // initialization
+	hwloc_topology_load(topology);   // actual detection
+
+	nbcores = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_CORE);
+	printf("%d cores\n", nbcores);
+
+	hwloc_topology_destroy(topology);
+
 	m_workers = new worker_t[m_nworkers];
 	for (size_t i = 0; i < m_nworkers; ++i)
 		m_workers[i].ready = false;
 
-	bool is_master = true;
+	int nvictims = 1;
+	int core_id = -1;
+	int node_id = -1;
 
-	for (size_t w = 0; w < m_nworkers; ++w) {
-		size_t n = w % m_topology.size();
-		size_t c = m_topology[n][w / m_topology.size()];
-		size_t v = m_topology[n].size();
+	get_worker_location(0, core_id, node_id, nvictims);
+	create_worker(0, core_id, node_id, nvictims);
+	m_workers[0].thr = nullptr;
+	m_master = m_workers[0].wkr;
 
-		if (is_master) {
-			create_worker(w, c, n, v);
-			m_workers[w].thr = nullptr;
-			m_master = m_workers[w].wkr;
-			is_master = false;
-		} else {
-			m_workers[w].thr = new std::thread([=] {
-			create_worker(w, c, n, v);
-				m_workers[w].wkr->steal_loop();
-			});
-		}
-
-		Debug() << "Worker #" << w << "\t at node " << n << ", core " << c;
+	for (size_t i = 1; i < m_nworkers; ++i) {
+		get_worker_location(i, core_id, node_id, nvictims);
+		m_workers[i].thr = new std::thread([=] {
+			create_worker(i, core_id, node_id, nvictims);
+			m_workers[i].wkr->steal_loop();
+		});
 	}
 
 	for (size_t i = 0; i < m_nworkers; ++i)
@@ -214,48 +153,36 @@ void scheduler<T>::create_workers()
 		}
 		std::cerr << "\n";
 	}
+
 }
 
 template <typename T>
-void scheduler<T>::create_dispatcher()
+void scheduler<T>::create_dispatchers()
 {
 	using namespace internal;
 
-	m_dispatcher = new dispatcher_t;
-	m_dispatcher->ready = false;
+	m_dispatchers = new dispatcher_t[m_ndispatchers];
+	for (size_t i = 0; i < m_ndispatchers; ++i)
+		m_dispatchers[i].ready = false;
 
-	m_dispatcher->thr = new std::thread([=] {
+	for (size_t i = 0; i < m_ndispatchers; ++i) {
+		m_dispatchers[i].thr = new std::thread([=] {
+			create_dispatcher(i);
+			m_dispatchers[i].dsp->loop();
+		});
+	}
 
-		auto alloc = new lifo_allocator(predict_page_size());
-
-		auto dsp = alloc->alloc<dispatcher<T>>();
-		new (dsp) dispatcher<T>(
-			m_topology.size(),
-			alloc,
-			m_nworkers,
-			m_taskgraph_degree
-		);
-
-		m_dispatcher->alloc = alloc;
-		m_dispatcher->dsp = dsp;
-
-		for (size_t w = 0; w < m_nworkers; ++w) {
-			dsp->register_worker(m_workers[w].wkr);
-		}
-
-		m_dispatcher->ready = true;
-
-		m_dispatcher->dsp->loop();
-	});
-
-	while (!m_dispatcher->ready)
-		std::this_thread::yield();
+	for (size_t i = 0; i < m_ndispatchers; ++i)
+		while (!m_dispatchers[i].ready)
+			std::this_thread::yield();
 }
 
 template <typename T>
 void scheduler<T>::create_worker(size_t id, int core, int node, int nvictims)
 {
 	using namespace internal;
+
+	// Debug() << "Init worker #" << id;
 
 	auto alloc = new lifo_allocator(predict_page_size());
 
@@ -273,6 +200,91 @@ void scheduler<T>::create_worker(size_t id, int core, int node, int nvictims)
 	m_workers[id].alloc = alloc;
 	m_workers[id].wkr = wkr;
 	m_workers[id].ready = true;
+}
+
+template <typename T>
+void scheduler<T>::create_dispatcher(size_t id)
+{
+	using namespace internal;
+
+	Debug() << "Init dispatcher #" << id;
+
+	auto alloc = new lifo_allocator(predict_page_size());
+
+	int core_id = 41;
+	size_t nnodes = 2;
+
+	auto dsp = alloc->alloc<dispatcher<T>>();
+	new (dsp) dispatcher<T>(
+		id,
+		core_id,
+		nnodes,
+		alloc,
+		m_nworkers,
+		m_taskgraph_degree
+	);
+
+	m_dispatchers[id].alloc = alloc;
+	m_dispatchers[id].dsp = dsp;
+
+	for (size_t w = 0; w < m_nworkers; ++w) {
+		dsp->register_worker(m_workers[w].wkr);
+	}
+
+	m_dispatchers[id].ready = true;
+}
+
+/* TODO: use enums <09-12-18, yourname> */
+int read_affinity() {
+	const char* env = std::getenv("STACCATO_AFFINITY");
+
+	if (!env)
+		return 0;
+
+	if (std::strcmp(env, "scatter") == 0)
+		return 1;
+
+	if (std::strcmp(env, "compact") == 0)
+		return 2;
+
+	return 0;
+}
+
+int read_env_to_int(const char *name) {
+	const char* env = std::getenv(name);
+
+	if (!env)
+		return 0;
+
+	return std::atoi(env);
+}
+
+template <typename T>
+void scheduler<T>::get_worker_location(size_t id, int &core, int &node, int &nvictims)
+{
+	using namespace internal;
+
+	// nvictims = 28;
+	// node = 0;
+
+	nvictims = 14;
+	node = id % 2;
+
+	core = 14 * (id % 2) + id / 2; 
+
+	// nvictims = 28;
+	// node = 0;
+	// core = 14 * (id % 2) + id / 2; 
+
+	// nvictims = 28;
+	// node = 0;
+	// core = -1;
+
+	// nvictims = 14;
+	// node = 0;
+	// core = id; 
+
+	Debug() << "Worker #" << id << "\t at node " << node << ", core " << core;
 }
 
 template <typename T>
@@ -297,10 +309,11 @@ scheduler<T>::~scheduler()
 		m_workers[i].wkr->stop();
 	}
 
-	if (m_dispatcher) {
-		while (!m_dispatcher->ready)
+	for (size_t i = 0; i < m_ndispatchers; ++i) {
+		while (!m_dispatchers[i].ready)
 			std::this_thread::yield();
-		m_dispatcher->dsp->stop();
+
+		m_dispatchers[i].dsp->stop();
 	}
 
 #if STACCATO_DEBUG
@@ -311,28 +324,28 @@ scheduler<T>::~scheduler()
 		totals.join(m_workers[i].wkr->get_counter());
 	}
 	totals.print_totals();
-	if (m_dispatcher)
-		m_dispatcher->dsp->print_stats();
+	for (size_t i = 0; i < m_ndispatchers; ++i)
+		m_dispatchers[i].dsp->print_stats();
 #endif
 
 	for (size_t i = 1; i < m_nworkers; ++i)
 		m_workers[i].thr->join();
 
-	if (m_dispatcher)
-		m_dispatcher->thr->join();
+	for (size_t i = 0; i < m_ndispatchers; ++i)
+		m_dispatchers[i].thr->join();
 
 	for (size_t i = 0; i < m_nworkers; ++i) {
 		delete m_workers[i].alloc;
 		delete m_workers[i].thr;
 	}
 
-	if (m_dispatcher) {
-		delete m_dispatcher->alloc;
-		delete m_dispatcher->thr;
+	for (size_t i = 0; i <m_ndispatchers; ++i) {
+		delete m_dispatchers[i].alloc;
+		delete m_dispatchers[i].thr;
 	}
 
 	delete []m_workers;
-	delete []m_dispatcher;
+	delete []m_dispatchers;
 }
 
 template <typename T>

@@ -8,6 +8,9 @@
 #include <cerrno>
 #include <cstring>
 
+#include <numaif.h>
+#include <unistd.h>
+
 #include "task_deque.hpp"
 #include "utils.hpp"
 
@@ -126,6 +129,58 @@ template <typename T>
 unsigned task<T>::level() const
 {
 	return m_level;
+}
+
+template <typename T>
+void task<T>::migrate_pages(void *ptr, size_t n) const
+{
+	if (m_level != 0)
+		return;
+
+	// if (m_worker->node_id() == 0)
+	// 	return;
+
+	long page_size = sysconf(_SC_PAGESIZE);
+
+	if (n < page_size)
+		return;
+
+	size_t nr_pages = n / page_size; 
+
+	void **pages = new void*[nr_pages];
+	int *nodes = new int[nr_pages];
+	int *status = new int[nr_pages]();
+
+	long start = ((long) ptr) & -page_size;
+	for (size_t i = 0; i < nr_pages; ++i) {
+		nodes[i] = 1;
+		pages[i] = (void *)(start + i * page_size);
+		status[i] = -EBUSY;
+	}
+
+	unsigned nr_moved = -1;
+	while (nr_moved != 0 && nr_moved != nr_pages) {
+		for (size_t i = 0; i < nr_pages; ++i) {
+			if (status[i] != -EBUSY)
+				pages[i] = nullptr;
+		}
+
+		long rc = move_pages(0, nr_pages, pages, nodes, status, 0);
+		if (rc != 0)
+			std::cerr << "move_pages error: " << strerror(errno) << "\n";
+
+		nr_moved = 0;
+		for (size_t i = 0; i < nr_pages; ++i) {
+			if (status[i] == nodes[i])
+				nr_moved++;
+		}
+
+		std::clog << "moved " << nr_moved << "\n";
+	}
+
+	delete []pages;
+	delete []nodes;
+	delete []status;
 }
 
 

@@ -15,6 +15,8 @@ incdir = [
 
 deps = [
 	cpp.find_library('pthread'),
+	cpp.find_library('numa'),
+	cpp.find_library('hwloc'),
 ]
 
 cxxflags = [
@@ -40,11 +42,11 @@ foreach flag : test_flags
 endforeach
 
 subdir('benchmarks/staccato')
-subdir('benchmarks/sequential')
+# subdir('benchmarks/sequential')
 #subdir('benchmarks/cilk')
 #subdir('benchmarks/tbb')
 
-if get_option('buildtype').startswith('debug')
-	subdir('tests/')
-endif
+# if get_option('buildtype').startswith('debug')
+# 	subdir('tests/')
+# endif
 

@@ -12,6 +12,9 @@
 #include <task.hpp>
 #include <scheduler.hpp>
 
+#include <numaif.h>
+#include <unistd.h>
+
 using namespace std;
 using namespace chrono;
 using namespace staccato;
@@ -22,6 +25,53 @@ inline uint32_t xorshift_rand() {
 	x ^= x << 17;
 	x ^= x >> 5;
 	return x;
+}
+
+void migrate_pages(void *ptr, size_t n, int node)
+{
+	long page_size = sysconf(_SC_PAGESIZE);
+
+	if (n < page_size)
+		return;
+
+	size_t nr_pages = n / page_size; 
+
+	void **pages = new void*[nr_pages];
+	int *nodes = new int[nr_pages];
+	int *status = new int[nr_pages]();
+
+	long start = ((long) ptr) & -page_size;
+	for (size_t i = 0; i < nr_pages; ++i) {
+		nodes[i] = node;
+		pages[i] = (void *)(start + i * page_size);
+		status[i] = -EBUSY;
+	}
+
+	unsigned nr_moved = -1;
+	while (nr_moved != 0 && nr_moved != nr_pages) {
+		for (size_t i = 0; i < nr_pages; ++i) {
+			if (status[i] != -EBUSY)
+				pages[i] = nullptr;
+		}
+
+		long rc = move_pages(0, nr_pages, pages, nodes, status, 0);
+		if (rc != 0)
+			std::cerr << "move_pages error: " << strerror(errno) << "\n";
+
+		nr_moved = 0;
+		for (size_t i = 0; i < nr_pages; ++i) {
+			if (status[i] == nodes[i]) {
+				nr_moved++;
+			}
+		}
+
+
+		std::clog << "moved " << nr_moved << "/" << nr_pages << "\n";
+	}
+
+	delete []pages;
+	delete []nodes;
+	delete []status;
 }
 
 static const uint32_t rand_max = 1e3;
@@ -56,22 +106,14 @@ Block::Block()
 
 void Block::fill()
 {
-	for (size_t i = 0; i < size; i += 4) {
-		m_data[i + 0] += xorshift_rand() % rand_max;
-		m_data[i + 1] += xorshift_rand() % rand_max;
-		m_data[i + 2] += xorshift_rand() % rand_max;
-		m_data[i + 3] += xorshift_rand() % rand_max;
-	}
+	for (size_t i = 0; i < size; i++)
+		m_data[i] += xorshift_rand() % rand_max;
 }
 
 void Block::add(Block *a, Block *b)
 {
-	for (size_t i = 0; i < size; i += 4) {
-		m_data[i + 0] = a->m_data[i + 0] + b->m_data[i + 0];
-		m_data[i + 1] = a->m_data[i + 1] + b->m_data[i + 1];
-		m_data[i + 2] = a->m_data[i + 2] + b->m_data[i + 2];
-		m_data[i + 3] = a->m_data[i + 3] + b->m_data[i + 3];
-	}
+	for (size_t i = 0; i < size; i++)
+		m_data[i] = a->m_data[i] + b->m_data[i];
 }
 
 void Block::mul(Block *a, Block *b, bool add)
@@ -251,6 +293,11 @@ void OperationTask::mul() {
 
 	auto q = n / 4;
 
+	// migrate_pages(A+1*q, q * sizeof(Block));
+	// migrate_pages(A+3*q, q * sizeof(Block));
+	// migrate_pages(B+2*q, q * sizeof(Block));
+	// migrate_pages(B+3*q, q * sizeof(Block));
+
 	auto l = new Block[n];
 
 	spawn(new(child()) OperationTask(A+0*q, B+0*q, l+0*q, q));
@@ -335,11 +382,22 @@ int main(int argc, char *argv[])
 	cout << "Matrix dim: " << n * 16 << "\n";
 	auto nblocks = n * n;
 
-	cout << "Data size:  " << 3 * nblocks * sizeof(Block) / 1024 << "Kb\n";
+	cout << "Data size:  " << 3 * nblocks * sizeof(Block) / (1024*1024) << "Mb\n";
 
 	auto A = new Block[nblocks];
 	auto B = new Block[nblocks];
 	auto R = new Block[nblocks];
+
+	auto q = nblocks / 4;
+	migrate_pages(A+1*q, q * sizeof(Block), 1);
+	migrate_pages(A+3*q, q * sizeof(Block), 1);
+	migrate_pages(B+2*q, q * sizeof(Block), 1);
+	migrate_pages(B+3*q, q * sizeof(Block), 1);
+
+	migrate_pages(A+0*q, q * sizeof(Block), 0);
+	migrate_pages(A+2*q, q * sizeof(Block), 0);
+	migrate_pages(B+0*q, q * sizeof(Block), 0);
+	migrate_pages(B+1*q, q * sizeof(Block), 0);
 
 	fill(A, nblocks);
 	fill(B, nblocks);
