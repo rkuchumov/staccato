@@ -316,7 +316,7 @@ void OperationTask::mul() {
 
 	A = l;
 	B = r;
-	add();
+	// add();
 
 	delete []r;
 	delete []l;
@@ -377,6 +377,10 @@ int main(int argc, char *argv[])
 	if (nthreads == 0)
 		nthreads = thread::hardware_concurrency();
 
+	hwloc_topology_t topology;
+	hwloc_topology_init(&topology);
+	hwloc_topology_load(topology);
+
 	auto n = 1 << log_n;
 
 	cout << "Matrix dim: " << n * 16 << "\n";
@@ -388,16 +392,41 @@ int main(int argc, char *argv[])
 	auto B = new Block[nblocks];
 	auto R = new Block[nblocks];
 
-	auto q = nblocks / 4;
-	migrate_pages(A+1*q, q * sizeof(Block), 1);
-	migrate_pages(A+3*q, q * sizeof(Block), 1);
-	migrate_pages(B+2*q, q * sizeof(Block), 1);
-	migrate_pages(B+3*q, q * sizeof(Block), 1);
+    hwloc_obj_t n0 = hwloc_get_obj_by_type(topology, HWLOC_OBJ_NUMANODE, 0);
+    hwloc_obj_t n1 = hwloc_get_obj_by_type(topology, HWLOC_OBJ_NUMANODE, 1);
 
-	migrate_pages(A+0*q, q * sizeof(Block), 0);
-	migrate_pages(A+2*q, q * sizeof(Block), 0);
-	migrate_pages(B+0*q, q * sizeof(Block), 0);
-	migrate_pages(B+1*q, q * sizeof(Block), 0);
+	auto q = nblocks / 4;
+	unsigned qs = q * sizeof(Block);
+
+	int rc = 0;
+	rc = hwloc_set_area_membind(topology, A+1*q, qs, n1->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+	rc = hwloc_set_area_membind(topology, A+3*q, qs, n1->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+	rc = hwloc_set_area_membind(topology, B+2*q, qs, n1->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+	rc = hwloc_set_area_membind(topology, B+3*q, qs, n1->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+	
+
+	rc = hwloc_set_area_membind(topology, A+0*q, qs, n0->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+	rc = hwloc_set_area_membind(topology, A+2*q, qs, n0->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+	rc = hwloc_set_area_membind(topology, B+0*q, qs, n0->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+	rc = hwloc_set_area_membind(topology, B+1*q, qs, n0->nodeset, HWLOC_MEMBIND_BIND, HWLOC_MEMBIND_BYNODESET);
+	if (rc) std::cout << "oops\n";
+
+	// migrate_pages(A+1*q, q * sizeof(Block), 1);
+	// migrate_pages(A+3*q, q * sizeof(Block), 1);
+	// migrate_pages(B+2*q, q * sizeof(Block), 1);
+	// migrate_pages(B+3*q, q * sizeof(Block), 1);
+
+	// migrate_pages(A+0*q, q * sizeof(Block), 0);
+	// migrate_pages(A+2*q, q * sizeof(Block), 0);
+	// migrate_pages(B+0*q, q * sizeof(Block), 0);
+	// migrate_pages(B+1*q, q * sizeof(Block), 0);
 
 	fill(A, nblocks);
 	fill(B, nblocks);
@@ -405,7 +434,7 @@ int main(int argc, char *argv[])
 	auto start = system_clock::now();
 
 	{
-		scheduler<OperationTask> sh(8, nthreads);
+		scheduler<OperationTask> sh(8, nthreads, 1, false);
 		OperationTask root(A, B, R, nblocks);
 		sh.spawn_and_wait(&root);
 	}
